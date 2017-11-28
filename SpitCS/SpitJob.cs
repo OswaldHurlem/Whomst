@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -131,7 +133,7 @@ namespace SpitCS
                 {
                     "x|skip",
                     "doesn't evaluate spit code (and therefore does not generate it). " +
-                    $"Still tries to eval lines containing string \"//{SpitJob.ForceComment}\"",
+                    $"Still tries to eval lines beginning with \"//{SpitJob.ForceDirective}\"",
                     x => SkipCompute = (x != null)
                 },
                 {
@@ -279,7 +281,7 @@ namespace SpitCS
 
     public class SpitGlobalJob
     {
-        public ScriptState Script;
+        public ScriptState ScriptState;
         public readonly string[] PrevIncludes;
         public readonly List<SpitJob> Jobs = new List<SpitJob>();
 
@@ -290,14 +292,16 @@ namespace SpitCS
 
         public void AddJob(SpitJob newJob, string warningSrcFile = "", int warningLineNum = -1)
         {
-            if (Jobs.Any(j =>
+            var jobExists = Jobs.Any(j =>
                 j.Settings.InputFilePath == newJob.Settings.InputFilePath
-                && j.Settings.OutputFilePath == newJob.Settings.OutputFilePath))
-            {
-                Console.WriteLine($"SpitWarning at {warningSrcFile}({warningLineNum},0): "
-                    + $" Issued redundant preprocessor job, input file {newJob.Settings.InputFilePath}"
-                    + $" and output file {newJob.Settings.OutputFilePath}");
-            }
+                && j.Settings.OutputFilePath == newJob.Settings.OutputFilePath);
+
+            var msg = $"Issued redundant preprocessor job, input file {newJob.Settings.InputFilePath}"
+                      + $" and output file {newJob.Settings.OutputFilePath}";
+
+            Util.AssertWarning(!jobExists, msg, warningSrcFile, warningLineNum);
+
+            Jobs.Add(newJob);
         }
     }
 
@@ -311,7 +315,63 @@ namespace SpitCS
         IReadOnlyList<string> PrevCodeLines { get; }
         IReadOnlyDictionary<string, object> Defines { get; }
         TextWriter SpitOut { get; }
-        //T SpitEval<T>(string code)
+        OneTimeScriptState SpitEval(
+            string code,
+            [CallerFilePath] string sourceFile = "UNKNOWN",
+            [CallerLineNumber] int lineNumber = -1);
+    }
+
+    public class OneTimeScriptState : IDisposable
+    {
+        private static readonly List<OneTimeScriptState> Instances = new List<OneTimeScriptState>();
+
+        private readonly ScriptState _scriptState;
+
+        public ScriptState ScriptState
+        {
+            get
+            {
+                Dispose();
+                return _scriptState;
+            }
+        }
+
+        public string FileCreated { get; }
+        public int LineNumberCreated { get; }
+
+        private bool _disposed = false;
+
+        public OneTimeScriptState(ScriptState scriptState, string fileCreated, int lineNumberCreated = -1)
+        {
+            _scriptState = scriptState;
+            FileCreated = fileCreated;
+            LineNumberCreated = lineNumberCreated;
+            Instances.Add(this);
+        }
+
+        public void Dispose()
+        {
+            Util.AssertWarning(
+                !_disposed, 
+                $"{nameof(OneTimeScriptState)} has been disposed twice and likely represents mishandled execution state",
+                FileCreated, LineNumberCreated);
+            _disposed = true;
+        }
+
+        public static void CheckInstancesDisposed()
+        {
+            foreach (var instance in Instances)
+            {
+                Util.AssertWarning(instance._disposed,
+                    $"{nameof(OneTimeScriptState)} is not disposed and likely represents lost execution state",
+                    instance.FileCreated, instance.LineNumberCreated);
+            }
+        }
+
+        public override string ToString()
+        {
+            return $"{nameof(FileCreated)}: {FileCreated}, {nameof(LineNumberCreated)}: {LineNumberCreated}";
+        }
     }
 
     // Global state across multiple files
@@ -339,6 +399,14 @@ namespace SpitCS
         string ISpitJob.PrevCode => PrevCodeLines.AggLines();
         string ISpitJob.PrevContent => PrevContentLines.AggLines();
         string ISpitJob.PrevOutput => PrevOutputLines.AggLines();
+
+        public OneTimeScriptState SpitEval(
+            string code,
+            [CallerFilePath] string sourceFile = "UNKNOWN",
+            [CallerLineNumber] int lineNumber = -1)
+        {
+            return new OneTimeScriptState(Eval(code), sourceFile, lineNumber);
+        }
         #endregion
 
         public SpitJob(string[] args, TextWriter helpMsgWriter)
@@ -381,9 +449,9 @@ namespace SpitCS
 
         public void Run()
         {
-            if (GW.Script == null)
+            if (GW.ScriptState == null)
             {
-                GW.Script = CSharpScript.RunAsync(
+                GW.ScriptState = CSharpScript.RunAsync(
                     "",
                     ScriptOptions.Default
                         .AddReferences(
@@ -400,7 +468,8 @@ namespace SpitCS
                             "System.Reflection",
                             "System.Text",
                             "System.Text.RegularExpressions",
-                            "System.IO")
+                            "System.IO",
+                            "System.Runtime.CompilerServices") // TODO remove
                         .WithMetadataResolver(ScriptMetadataResolver.Default
                             .WithBaseDirectory(Environment.CurrentDirectory)
                             .WithSearchPaths(RuntimeEnvironment.GetRuntimeDirectory())
@@ -680,89 +749,71 @@ namespace SpitCS
             }
         }
 
-        public static string LoadToken => "@spitLoad";
-        public static string EvalToken => "@spitEval";
-        public static string ForceComment => "//SPITFORCE";
+        // public static string LoadToken => "@spitLoad";
+        // public static string EvalToken => "@spitEval";
+        public static string ForceDirective => "`force ";
+        public static string YieldDirective => "`yield ";
 
         private string[] EvaluateCode(int startingLine)
         {
-            SpitOut?.Close();
             SpitOut = new StringWriter();
 
             StringBuilder codeSb = new StringBuilder();
             string latestReturnValue = null;
             int lineNumber = startingLine - 1;
 
-            // Runs all code inside codeSb
-            Action<bool> runAggregated = (allowReturnValue) =>
+            void RunCollectedCode()
             {
-                var code = codeSb.ToString();
+                OneTimeScriptState.CheckInstancesDisposed();
+                GW.ScriptState = Eval(codeSb.ToString());
                 codeSb.Clear();
+                var returnValue = GW.ScriptState.ReturnValue;
+                var returnValueScriptState = returnValue as OneTimeScriptState;
 
-                CatchScriptExceptions(() => GW.Script = GW.Script.ContinueWithAsync(code).Result);
-
-                if (GW.Script.ReturnValue != null)
+                if (returnValueScriptState != null)
                 {
-                    if (allowReturnValue)
-                    {
-                        SpitOut.WriteLine(GW.Script.ReturnValue.ToString());
-                    }
-                    else
-                    {
-                        var e = new InvalidOperationException("Can't return a value before an @spitDirective");
-                        Console.Error.WriteLine(e);
-                        throw e;
-                    }
+                    GW.ScriptState = returnValueScriptState.ScriptState;
                 }
-            };
+                else if (returnValue != null)
+                {
+                    SpitOut.WriteLine(returnValue);
+                }
+            }
 
             foreach (var line in PrevCodeLines)
             {
                 lineNumber++;
+                bool forced = false;
+                bool yield = false;
+                string trimmedLine = line.Trim();
 
-                if (Settings.MustSkipCompute && !line.Contains(ForceComment))
+                if (trimmedLine.StartsWith(ForceDirective))
+                {
+                    forced = true;
+                    trimmedLine = trimmedLine.Replace(ForceDirective, "");
+                }
+
+                if (Settings.MustSkipCompute && !forced)
                 {
                     continue;
                 }
 
-                var trimmedLine = line.Trim();
-
-                if (trimmedLine.StartsWith(LoadToken))
+                if (trimmedLine.StartsWith(YieldDirective))
                 {
-                    runAggregated(false);
-
-                    // TODO this should EVAL
-                    var arguments = trimmedLine.Substring(LoadToken.Length + 1).Split(' ');
-                    var newJob = new SpitJob(this, arguments, Console.Out);
-                    GW.AddJob(newJob, Settings.InputFileName, lineNumber);
-                    newJob.Run();
+                    yield = true;
+                    trimmedLine = trimmedLine.Replace(YieldDirective, "");
                 }
-                else if (trimmedLine.StartsWith(EvalToken))
+
+                codeSb.AppendLine($"#line {lineNumber} \"{Settings.InputFileName}\"");
+                codeSb.AppendLine(trimmedLine);
+
+                if (yield)
                 {
-                    runAggregated(false);
-
-                    var thingToEval = trimmedLine.Substring(EvalToken.Length + 1);
-
-                    var lineNumberDirective = $"#line {lineNumber} \"{Settings.InputFileName}\"";
-                    var code = lineNumberDirective + Environment.NewLine + thingToEval;
-                    CatchScriptExceptions(() => GW.Script = GW.Script.ContinueWithAsync<string>(code).Result);
-
-                    var returnLines = (GW.Script.ReturnValue as string).EzSplit(Environment.NewLine);
-
-                    foreach (var l in returnLines)
-                    {
-                        codeSb.AppendLine(lineNumberDirective);
-                        codeSb.AppendLine(l);
-                    }
-                }
-                else
-                {
-                    codeSb.AppendLine($"#line {lineNumber} \"{Settings.InputFileName}\"");
-                    codeSb.AppendLine(line);
+                    RunCollectedCode();
                 }
             }
 
-            runAggregated(true);
+            RunCollectedCode();
 
             var outputUnindented = SpitOut.GetStringBuilder().ToString();
 
@@ -772,23 +823,21 @@ namespace SpitCS
             }
 
             var outputLines = outputUnindented.EzSplit(Environment.NewLine);
+
+            SpitOut.Dispose();
+            SpitOut = null;
+
             return outputLines;
         }
 
-        private void CatchScriptExceptions(Action a)
+        public ScriptState Eval(string code)
         {
             try
             {
-                a();
-            }
-            catch (CompilationErrorException compileEx)
-            {
-                // Console.Error.WriteLine(compileEx);
-                throw;
+                return GW.ScriptState.ContinueWithAsync(code).Result;
             }
             catch (AggregateException aggregateEx)
             {
-                // Console.Error.WriteLine(aggregateEx.InnerException);
                 throw aggregateEx.InnerException ?? aggregateEx;
             }
         }

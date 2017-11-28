@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 
 /*
  * TODO (list)
- * See if SpitEval will work as a weird cyclic thing
+ * Make yield and force directives configurable
  * Make load directive take in job description object + make scripts able to access clone of current file's job desc
  * Indent handling as separate subroutine
  * 
@@ -30,12 +30,22 @@ namespace SpitCS
     public static class Util
     {
         public static void Assert(bool condition, string message,
-            [CallerFilePath] string sourceFile = "",
+            [CallerFilePath] string sourceFile = "UNKNOWN",
             [CallerLineNumber] int lineNumber = -1)
         {
             if (!condition)
             {
                 throw new Exception($"SpitError at {sourceFile}({lineNumber},0): {message}");
+            }
+        }
+
+        public static void AssertWarning(bool condition, string message,
+            [CallerFilePath] string sourceFile = "UNKNOWN",
+            [CallerLineNumber] int lineNumber = -1)
+        {
+            if (!condition)
+            {
+                Console.Error.WriteLine($"SpitWarning at {sourceFile}({lineNumber},0): {message}");
             }
         }
 
@@ -96,7 +106,7 @@ namespace SpitCS
 
         public static string[] EzSplit(this string s, params string[] splitters)
         {
-            return s.Split(splitters, StringSplitOptions.None);
+            return s == "" ? new string[0] : s.Split(splitters, StringSplitOptions.None);
         }
     }
 }
