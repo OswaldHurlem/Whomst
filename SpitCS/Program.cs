@@ -1,14 +1,20 @@
-﻿using System;
+﻿using Mono.Options;
+using Newtonsoft.Json;
+using SpitCS.User;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 
 /*
  * TODO (list)
- * Make yield and force directives configurable
+ * Remove null-as-negatory nonsense
  * Make load directive take in job description object + make scripts able to access clone of current file's job desc
  * Indent handling as separate subroutine
+ * Multiple files in cmd line
+ * NewLine!!
  * 
  * DECIDED AGAINST
  * fancy dependency graph nonsense
@@ -21,9 +27,86 @@ namespace SpitCS
     {
         static void Main(string[] args)
         {
-            var job = new SpitJob(args, Console.Out);
+            var firstJob = ParseCommandLine(args, out string cfgFilename);
+
+            StackCfg cfg = new StackCfg();
+
+            if (cfgFilename != null)
+            {
+                try
+                {
+                    cfg = StackCfg.LoadJson(cfgFilename);
+                }
+                catch (Exception e)
+                {
+                    var defaultCfgFile = "spit-default.json";
+                    var excMessage = $"Could not load config file {cfgFilename}.";
+                    var helpfulMessage = excMessage
+                        + $"Generating {defaultCfgFile}. Use it with /cfg={defaultCfgFile})";
+
+                    Console.WriteLine(helpfulMessage);
+                    File.WriteAllText(defaultCfgFile,
+                        JsonConvert.SerializeObject(StackCfg.Default, Formatting.Indented));
+                    throw new AggregateException(excMessage, e);
+                }
+            }
+
+            // NOTE cfg.PrepareForUse unnecessary, will get called in SpitJob ctor
+
+            var job = new SpitJob(firstJob, cfg);
             job.Run();
             job.WriteAll();
+        }
+
+        public static FileCfg ParseCommandLine(string[] args, out string jsonFilename)
+        {
+            var firstJob = new FileCfg();
+            string jsonFilenameLocal = null;
+            bool showHelp = false;
+
+            var options = new OptionSet
+            {
+                { "i|input=",    "the file to preprocess",          i => firstJob.InputFileName = i            },
+                { "g|generate",  "generate code",                   g => firstJob.Generate = (g != null)       },
+                { "c|clean",     "deletes generated code",          c => firstJob.DeleteOutput = (c != null)   },
+                { "p|private",   "deletes spit generator code",     p => firstJob.DeleteSpitCode = (p != null) },
+                { "cfg|config=", "json file holding configuration", f => jsonFilenameLocal = f                 },
+                { "h|help",      "show this message and exit",      v => showHelp = (v != null)                },
+                {
+                    "x|skip",
+                    "doesn't evaluate spit code (and therefore does not generate it). Still tries to eval lines beginning " +
+                    $"with force directive (default  \"{FormatCfg.Default.ForceDirective}\"",
+                    x => firstJob.SkipCompute = (x != null)
+                },
+                {
+                    "o|output=",
+                    "where the file with generated code added gets written to. Leave blank to replace existing file",
+                    o => firstJob.OutputFileName = o
+                },
+            };
+
+            jsonFilename = jsonFilenameLocal;
+
+            try { options.Parse(args); }
+            catch (OptionException e)
+            {
+                options.WriteOptionDescriptions(Console.Out);
+                throw e;
+            }
+
+            if (showHelp)
+            {
+                options.WriteOptionDescriptions(Console.Out);
+                Environment.Exit(0);
+            }
+
+            catch (Exception)
+            {
+                options.WriteOptionDescriptions(Console.Out);
+                throw;
+            }
+
+            return firstJob;
         }
     }
 
@@ -107,6 +190,11 @@ namespace SpitCS
         public static string[] EzSplit(this string s, params string[] splitters)
         {
             return s == "" ? new string[0] : s.Split(splitters, StringSplitOptions.None);
+        }
+
+        public static Dictionary<TK, TV> Clone<TK, TV>(this IReadOnlyDictionary<TK, TV> d)
+        {
+            return d.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
     }
 }

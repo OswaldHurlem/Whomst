@@ -282,13 +282,7 @@ namespace SpitCS
     public class SpitGlobalJob
     {
         public ScriptState ScriptState;
-        public readonly string[] PrevIncludes;
         public readonly List<SpitJob> Jobs = new List<SpitJob>();
-
-        public SpitGlobalJob(string[] includes)
-        {
-            PrevIncludes = includes;
-        }
 
         public void AddJob(SpitJob newJob, string warningSrcFile = "", int warningLineNum = -1)
         {
@@ -305,81 +299,24 @@ namespace SpitCS
         }
     }
 
-    public interface ISpitJob
-    {
-        string PrevContent { get; }
-        string PrevOutput { get; }
-        string PrevCode { get; }
-        IReadOnlyList<string> PrevContentLines { get; }
-        IReadOnlyList<string> PrevOutputLines { get; }
-        IReadOnlyList<string> PrevCodeLines { get; }
-        IReadOnlyDictionary<string, object> Defines { get; }
-        TextWriter SpitOut { get; }
-        OneTimeScriptState SpitEval(
-            string code,
-            [CallerFilePath] string sourceFile = "UNKNOWN",
-            [CallerLineNumber] int lineNumber = -1);
-    }
-
-    public class OneTimeScriptState : IDisposable
-    {
-        private static readonly List<OneTimeScriptState> Instances = new List<OneTimeScriptState>();
-
-        private readonly ScriptState _scriptState;
-
-        public ScriptState ScriptState
-        {
-            get
-            {
-                Dispose();
-                return _scriptState;
-            }
-        }
-
-        public string FileCreated { get; }
-        public int LineNumberCreated { get; }
-
-        private bool _disposed = false;
-
-        public OneTimeScriptState(ScriptState scriptState, string fileCreated, int lineNumberCreated = -1)
-        {
-            _scriptState = scriptState;
-            FileCreated = fileCreated;
-            LineNumberCreated = lineNumberCreated;
-            Instances.Add(this);
-        }
-
-        public void Dispose()
-        {
-            Util.AssertWarning(
-                !_disposed, 
-                $"{nameof(OneTimeScriptState)} has been disposed twice and likely represents mishandled execution state",
-                FileCreated, LineNumberCreated);
-            _disposed = true;
-        }
-
-        public static void CheckInstancesDisposed()
-        {
-            foreach (var instance in Instances)
-            {
-                Util.AssertWarning(instance._disposed,
-                    $"{nameof(OneTimeScriptState)} is not disposed and likely represents lost execution state",
-                    instance.FileCreated, instance.LineNumberCreated);
-            }
-        }
-
-        public override string ToString()
-        {
-            return $"{nameof(FileCreated)}: {FileCreated}, {nameof(LineNumberCreated)}: {LineNumberCreated}";
-        }
-    }
-
     // Global state across multiple files
-    public class SpitJob : ISpitJob
+    public class SpitJob : SpitJob.ISpitJob
     {
-        public readonly SpitGlobalJob GW;
-
-        public readonly SpitFileSettings Settings;
+        public interface ISpitJob
+        {
+            string PrevContent { get; }
+            string PrevOutput { get; }
+            string PrevCode { get; }
+            IReadOnlyList<string> PrevContentLines { get; }
+            IReadOnlyList<string> PrevOutputLines { get; }
+            IReadOnlyList<string> PrevCodeLines { get; }
+            IReadOnlyDictionary<string, object> Defines { get; }
+            TextWriter SpitOut { get; }
+            OneTimeScriptState SpitEval(
+                string code,
+                [CallerFilePath] string sourceFile = "UNKNOWN",
+                [CallerLineNumber] int lineNumber = -1);
+        }
 
         // Long term state
         public readonly List<LineGroup> LineGroups = new List<LineGroup>();
@@ -400,7 +337,7 @@ namespace SpitCS
         string ISpitJob.PrevContent => PrevContentLines.AggLines();
         string ISpitJob.PrevOutput => PrevOutputLines.AggLines();
 
-        public OneTimeScriptState SpitEval(
+        OneTimeScriptState ISpitJob.SpitEval(
             string code,
             [CallerFilePath] string sourceFile = "UNKNOWN",
             [CallerLineNumber] int lineNumber = -1)
@@ -409,27 +346,32 @@ namespace SpitCS
         }
         #endregion
 
-        public SpitJob(string[] args, TextWriter helpMsgWriter)
-        {
-            string[] includes = null;
-            Settings = new SpitFileSettings();
-            Settings.Configure(args, helpMsgWriter, ref includes);
-            Settings.EnsureDefaultFiletypeConfig();
-            GW = new SpitGlobalJob(includes);
-            GW.AddJob(this, null, 0);
-        }
+        // Actually used in execution
+        public FileCfg _UsedFileCfg;
+        public StackCfg _UsedStackCfg;
 
-        public SpitJob(SpitJob existing, string[] args, TextWriter helpMsgWriter)
-        {
-            Settings = new SpitFileSettings();
-            string[] prevIncludes = existing.GW.PrevIncludes;
-            Settings.Configure(args, helpMsgWriter, ref prevIncludes);
-            Settings.MergeInferior(existing.Settings);
-            Settings.EnsureDefaultFiletypeConfig();
-            GW = existing.GW;
-        }
+        // For use when creating new jobs
+        public FileCfg _SharedFileCfg;
+        public StackCfg _SharedStackCfg;
 
-        public SpitFileSettings.FiletypeConfig Ftc => Settings.Ftc;
+        // Shared execution state
+        public SpitGlobalJob _GlobalJob;
+
+        public SpitJob(FileCfg sharedFileCfg, StackCfg sharedStackCfg, SpitGlobalJob existingGlobalJob)
+        {
+            _SharedStackCfg = sharedStackCfg;
+            _UsedStackCfg = sharedStackCfg.Clone.ApplyDefaults();
+
+            _SharedFileCfg = sharedFileCfg;
+
+            _UsedFileCfg = _SharedFileCfg.Clone;
+            _UsedFileCfg.StackCfgForGettingDefault = _UsedStackCfg;
+            _UsedFileCfg.ApplyDefaults();
+
+            _GlobalJob = existingGlobalJob ?? new SpitGlobalJob();
+            _GlobalJob.ApplyStackCfg(_UsedStackCfg);
+            _GlobalJob.AddJob(this);
+        }
 
         public class LineGroupBound
         {
@@ -443,7 +385,6 @@ namespace SpitCS
             }
         }
 
-        private string HashInfix => " HASH = ";
         private string HashRegex => $@"{HashInfix}\(([^)]*)\)";
         private string FmtHash(string hashCode) => $"{HashInfix}({hashCode})";
 
@@ -580,6 +521,59 @@ namespace SpitCS
             PrevOutputLines = null;
         }
 
+        public class OneTimeScriptState : IDisposable
+        {
+            private static readonly List<OneTimeScriptState> Instances = new List<OneTimeScriptState>();
+
+            private readonly ScriptState _scriptState;
+
+            public ScriptState ScriptState
+            {
+                get
+                {
+                    Dispose();
+                    return _scriptState;
+                }
+            }
+
+            public string FileCreated { get; }
+            public int LineNumberCreated { get; }
+
+            private bool _disposed = false;
+
+            public OneTimeScriptState(ScriptState scriptState, string fileCreated, int lineNumberCreated = -1)
+            {
+                _scriptState = scriptState;
+                FileCreated = fileCreated;
+                LineNumberCreated = lineNumberCreated;
+                Instances.Add(this);
+            }
+
+            public void Dispose()
+            {
+                Util.AssertWarning(
+                    !_disposed,
+                    $"{nameof(OneTimeScriptState)} has been disposed twice and likely represents mishandled execution state",
+                    FileCreated, LineNumberCreated);
+                _disposed = true;
+            }
+
+            public static void CheckInstancesDisposed()
+            {
+                foreach (var instance in Instances)
+                {
+                    Util.AssertWarning(instance._disposed,
+                        $"{nameof(OneTimeScriptState)} is not disposed and likely represents lost execution state",
+                        instance.FileCreated, instance.LineNumberCreated);
+                }
+            }
+
+            public override string ToString()
+            {
+                return $"{nameof(FileCreated)}: {FileCreated}, {nameof(LineNumberCreated)}: {LineNumberCreated}";
+            }
+        }
+
         private void Evaluate()
         {
             string Indent = "";
@@ -690,6 +684,7 @@ namespace SpitCS
                 return;
             }
 
+            
             using (var writer = new StreamWriter(Settings.OutputFilePath, false, Settings.Encoding))
             {
                 foreach (var lineGroup in LineGroups)
@@ -748,11 +743,6 @@ namespace SpitCS
                 }
             }
         }
-
-        // public static string LoadToken => "@spitLoad";
-        // public static string EvalToken => "@spitEval";
-        public static string ForceDirective => "`force ";
-        public static string YieldDirective => "`yield ";
 
         private string[] EvaluateCode(int startingLine)
         {
