@@ -10,15 +10,12 @@ using System.Security.Cryptography;
 
 /*
  * TODO (list)
- * Remove null-as-negatory nonsense
- * Make load directive take in job description object + make scripts able to access clone of current file's job desc
+ * Comment indents
+ * Single lines??
  * Indent handling as separate subroutine
  * Multiple files in cmd line
  * NewLine!!
- * 
- * DECIDED AGAINST
- * fancy dependency graph nonsense
- * more sophisticated logging
+ * Yield not at beginning of line??
  */
 
 namespace SpitCS
@@ -27,15 +24,15 @@ namespace SpitCS
     {
         static void Main(string[] args)
         {
-            var firstJob = ParseCommandLine(args, out string cfgFilename);
+            var fileCfg = ParseCommandLine(args, out string cfgFilename);
 
-            StackCfg cfg = new StackCfg();
+            var stackCfg = new StackCfg();
 
             if (cfgFilename != null)
             {
                 try
                 {
-                    cfg = StackCfg.LoadJson(cfgFilename);
+                    stackCfg = StackCfg.LoadJson(cfgFilename);
                 }
                 catch (Exception e)
                 {
@@ -45,17 +42,19 @@ namespace SpitCS
                         + $"Generating {defaultCfgFile}. Use it with /cfg={defaultCfgFile})";
 
                     Console.WriteLine(helpfulMessage);
-                    File.WriteAllText(defaultCfgFile,
-                        JsonConvert.SerializeObject(StackCfg.Default, Formatting.Indented));
+                    File.WriteAllText(
+                        defaultCfgFile,
+                        JsonConvert.SerializeObject(StackCfg.Default(), new JsonSerializerSettings
+                        {
+                            Formatting = Formatting.Indented,
+                            NullValueHandling = NullValueHandling.Ignore,
+                        }));
                     throw new AggregateException(excMessage, e);
                 }
             }
 
             // NOTE cfg.PrepareForUse unnecessary, will get called in SpitJob ctor
-
-            var job = new SpitJob(firstJob, cfg);
-            job.Run();
-            job.WriteAll();
+            SpitGlobalJob.Execute(fileCfg, stackCfg);
         }
 
         public static FileCfg ParseCommandLine(string[] args, out string jsonFilename)
@@ -75,7 +74,7 @@ namespace SpitCS
                 {
                     "x|skip",
                     "doesn't evaluate spit code (and therefore does not generate it). Still tries to eval lines beginning " +
-                    $"with force directive (default  \"{FormatCfg.Default.ForceDirective}\"",
+                    $"with force directive (default  \"{FormatCfg.Default().ForceDirective}\"",
                     x => firstJob.SkipCompute = (x != null)
                 },
                 {
@@ -84,8 +83,6 @@ namespace SpitCS
                     o => firstJob.OutputFileName = o
                 },
             };
-
-            jsonFilename = jsonFilenameLocal;
 
             try { options.Parse(args); }
             catch (OptionException e)
@@ -100,11 +97,7 @@ namespace SpitCS
                 Environment.Exit(0);
             }
 
-            catch (Exception)
-            {
-                options.WriteOptionDescriptions(Console.Out);
-                throw;
-            }
+            jsonFilename = jsonFilenameLocal;
 
             return firstJob;
         }
@@ -195,6 +188,17 @@ namespace SpitCS
         public static Dictionary<TK, TV> Clone<TK, TV>(this IReadOnlyDictionary<TK, TV> d)
         {
             return d.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        }
+
+        public static string AtString(string text, string newLine)
+        {
+            var lines = text.EzSplit(newLine).ToList();
+            if (lines[0].Trim() == "") { lines.RemoveAt(0); }
+            if (lines[lines.Count - 1].Trim() == "") { lines.RemoveAt(lines.Count - 1); }
+
+            var minIndent = lines.Min(l => text.TakeWhile(c => c == ' ').Count());
+
+            return string.Join(newLine, lines.Select(l => l.Substring(minIndent)));
         }
     }
 }
