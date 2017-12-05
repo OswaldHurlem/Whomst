@@ -74,7 +74,7 @@ namespace SpitCS
             DefaultFormatCfg = FormatCfg.Default(),
             FormatDict = new FmtDict
             {
-                [".html"] = FormatCfg.Html(),
+                [".py"] = FormatCfg.Python(),
             },
             InitialDefines = new DefineDict
             {
@@ -127,8 +127,13 @@ namespace SpitCS
         [DataMember] public string StartSpitToken { get; set; } = null;
         [DataMember] public string StartOutputToken { get; set; } = null;
         [DataMember] public string EndOutputToken { get; set; } = null;
+        [DataMember] public string OneLinerStartSpitToken { get; set; } = null;
+        [DataMember] public string OneLinerStartOutputToken { get; set; } = null;
+        [DataMember] public string OneLinerEndOutputToken { get; set; } = null;
         [DataMember] public string ColdStartOutputToken { get; set; } = null;
         [DataMember] public string ColdEndOutputToken { get; set; } = null;
+        [DataMember] public string OneLinerColdStartOutputToken { get; set; } = null;
+        [DataMember] public string OneLinerColdEndOutputToken { get; set; } = null;
         [DataMember] public string OutputSuffix { get; set; } = null;
         [DataMember] public string ForceDirective { get; set; } = null;
         [DataMember] public string YieldDirective { get; set; } = null;
@@ -146,33 +151,39 @@ namespace SpitCS
 
         public static FormatCfg Default() => new FormatCfg
         {
-            StartSpitToken = "#if SPIT",
-            StartOutputToken = "#else //SPIT",
-            EndOutputToken = "#endif //SPIT",
-            ColdStartOutputToken = "#if !SPIT //Generated code",
-            ColdEndOutputToken = "#endif //!SPIT",
+            StartSpitToken = "/*{{",
+            StartOutputToken = "}}*/",
+            EndOutputToken = "//{}",
+            OneLinerStartSpitToken = "/*{",
+            OneLinerStartOutputToken = "}*/",
+            OneLinerEndOutputToken = "/**/",
+            ColdStartOutputToken = "/*[*/",
+            ColdEndOutputToken = "/*]*/",
+            OneLinerColdStartOutputToken = "/*[[*/",
+            OneLinerColdEndOutputToken = "/*]]*/",
             OutputSuffix = "",
-            ForceDirective = "`force",
-            YieldDirective = "`yield",
+            ForceDirective = "`force ",
+            YieldDirective = "`yield ",
             HashInfix = " HASH:",
             NewL = "\r\n",
             EncodingName = Encoding.UTF8.WebName,
         };
 
-        public static FormatCfg Html() => new FormatCfg
+        public static FormatCfg Python() => new FormatCfg
         {
-            StartSpitToken = "<!-- SPIT",
-            StartOutputToken = "-- --SPIT",
-            EndOutputToken = "SPIT-->",
-            ColdStartOutputToken = "<!--SPITGeneratedCode-->",
-            ColdEndOutputToken = "<!--/SPITGeneratedCode-->",
-            HashInfix = " HASH:",
+            StartSpitToken = "<|<",
+            StartOutputToken = ">|>",
+            EndOutputToken = "<|>",
+            ColdStartOutputToken = "[|[",
+            ColdEndOutputToken = "]|]",
+            OneLinerStartOutputToken = "%#@!%#@!$@#!$",
+            OneLinerEndOutputToken = "%#@!%#@!$@#!$",
+            OneLinerColdStartOutputToken = "%#@!%#@!$@#!$",
+            OneLinerColdEndOutputToken = "%#@!%#@!$@#!$",
+            HashInfix = "HASH:",
             NewL = "\n",
             EncodingName = Encoding.UTF8.WebName,
         };
-
-        public string HashRegex => $@"{HashInfix}\(([^)]*)\)";
-        public string FmtHash(string hashCode) => $"{HashInfix}({hashCode})";
     }
 
 
@@ -187,7 +198,7 @@ namespace SpitCS
         public string InputFileName
         {
             get => Path.GetFileName(InputFilePath);
-            set => InputFilePath = Path.GetFullPath(value);
+            set => InputFilePath = value == null ? null : Path.GetFullPath(value);
         }
 
         public string InputFileExt => Path.GetExtension(InputFilePath);
@@ -196,7 +207,7 @@ namespace SpitCS
         public string OutputFileName
         {
             get => Path.GetFileName(OutputFilePath);
-            set => OutputFilePath = Path.GetFullPath(value);
+            set => OutputFilePath = value == null ? null : Path.GetFullPath(value);
         }
 
         [DataMember] public bool? Generate { get; set; } = null;
@@ -216,6 +227,11 @@ namespace SpitCS
             if (InputFilePath == null)
             {
                 throw new ArgumentException("Input file (/i) must be specified");
+            }
+
+            if (OutputFilePath == null)
+            {
+                OutputFilePath = InputFilePath;
             }
 
             if (Generate == null
@@ -242,7 +258,7 @@ namespace SpitCS
         {
             Util.Assert(inFile != null, "Input and output files cannot be null");
             InputFileName = inFile;
-            OutputFileName = outFile ?? inFile;
+            OutputFileName = outFile;// ?? inFile;
             return this;
         }
 

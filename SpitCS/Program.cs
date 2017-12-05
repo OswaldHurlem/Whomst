@@ -1,6 +1,5 @@
 ﻿using Mono.Options;
 using Newtonsoft.Json;
-using SpitCS.User;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,12 +9,14 @@ using System.Security.Cryptography;
 
 /*
  * TODO (list)
- * Comment indents
- * Single lines??
- * Indent handling as separate subroutine
+ * Cleanup
+ * Multiple one-liners per line
+ * Force in one-liners
  * Multiple files in cmd line
  * NewLine!!
  * Yield not at beginning of line??
+ * No hash when InFile != OutFile
+ * Dubious restriction on stuff same line as start/end tokens
  */
 
 namespace SpitCS
@@ -125,48 +126,14 @@ namespace SpitCS
             }
         }
 
-        public static IEnumerable<KeyValuePair<int, T>> Indexed<T>(this IEnumerable<T> list)
+        public static IList<T> Slice<T>(this IList<T> list, int from, int to)
         {
-            return list.Select((obj, ind) => new KeyValuePair<int, T>(ind, obj));
+            return list.Skip(from).Take(to - from).ToList();
         }
 
-        public static IEnumerable<T> Slice<T>(this IEnumerable<T> seq, int from, int to)
+        public static string AggLines(this IEnumerable<string> lines, string newL)
         {
-            return seq.Skip(from).Take(to - from);
-        }
-
-        public static string AggLines(this IEnumerable<string> lines)
-        {
-            return string.Join(Environment.NewLine, lines);
-        }
-
-        public static IEnumerable<T> CombineSeqs<T>(params IEnumerable<T>[] seqs)
-        {
-            return seqs.SelectMany(s => s);
-        }
-
-        public static IEnumerable<T> Linqify<T>(this T obj)
-        {
-            return new[] {obj};
-        }
-
-        public static IEnumerable<T> TakeAllButLast<T>(this IEnumerable<T> source)
-        {
-            var it = source.GetEnumerator();
-            bool hasRemainingItems = false;
-            bool isFirst = true;
-            T item = default(T);
-
-            do
-            {
-                hasRemainingItems = it.MoveNext();
-                if (hasRemainingItems)
-                {
-                    if (!isFirst) yield return item;
-                    item = it.Current;
-                    isFirst = false;
-                }
-            } while (hasRemainingItems);
+            return string.Join(newL, lines);
         }
 
         public static MD5 md5 = System.Security.Cryptography.MD5.Create();
@@ -185,11 +152,6 @@ namespace SpitCS
             return s == "" ? new string[0] : s.Split(splitters, StringSplitOptions.None);
         }
 
-        public static Dictionary<TK, TV> Clone<TK, TV>(this IReadOnlyDictionary<TK, TV> d)
-        {
-            return d.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        }
-
         public static string AtString(string text, string newLine)
         {
             var lines = text.EzSplit(newLine).ToList();
@@ -199,6 +161,11 @@ namespace SpitCS
             var minIndent = lines.Min(l => text.TakeWhile(c => c == ' ').Count());
 
             return string.Join(newLine, lines.Select(l => l.Substring(minIndent)));
+        }
+
+        public static T[] Array1<T>(this T val)
+        {
+            return new[] {val};
         }
     }
 }

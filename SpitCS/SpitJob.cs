@@ -1,18 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Dynamic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
-using Mono.Options;
-using Newtonsoft.Json;
 
 namespace SpitCS
 {
@@ -32,18 +27,18 @@ namespace SpitCS
 
         public SpitJob CurrentJob => jobStack.Peek();
 
-        #region ISplitGlobals implementation
-        IReadOnlyList<string> ISpitGlobals.PrevCodeLines => CurrentJob.PrevCodeLines;
-        IReadOnlyList<string> ISpitGlobals.PrevContentLines => CurrentJob.PrevContentLines;
-        IReadOnlyList<string> ISpitGlobals.PrevOutputLines => CurrentJob.PrevOutputLines;
-        string ISpitGlobals.PrevCode => CurrentJob.PrevCodeLines.AggLines();
-        string ISpitGlobals.PrevContent => CurrentJob.PrevContentLines.AggLines();
-        string ISpitGlobals.PrevOutput => CurrentJob.PrevOutputLines.AggLines();
+        #region ISpitGlobals implementation
+        IList<string> ISpitGlobals.PrevCodeLines => CurrentJob.PrevCodeLines;
+        IList<string> ISpitGlobals.PrevContentLines => CurrentJob.PrevContentLines;
+        IList<string> ISpitGlobals.PrevOutputLines => CurrentJob.PrevOutputLines;
+        string ISpitGlobals.PrevCode => CurrentJob.PrevCodeLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
+        string ISpitGlobals.PrevContent => CurrentJob.PrevContentLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
+        string ISpitGlobals.PrevOutput => CurrentJob.PrevOutputLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
         TextWriter ISpitGlobals.SpitOut => CurrentJob.SpitOut;
         string ISpitGlobals.AtString(string s) => Util.AtString(s, CurrentJob.FileCfg.FormatCfg.NewL);
-        IReadOnlyDictionary<string, object> ISpitGlobals.Defines => CurrentJob.FileCfg.Defines;
+        IDictionary<string, object> ISpitGlobals.Defines => CurrentJob.FileCfg.Defines;
         OneTimeScriptState ISpitGlobals.SpitEval(string code, string src, int ln) =>
-            new OneTimeScriptState(Eval(code), src, ln);
+            new OneTimeScriptState(Eval(code, src, ln), src, ln);
         FileCfg ISpitGlobals.FileConfig => CurrentJob.SharedFileCfg.Clone();
         StackCfg ISpitGlobals.StackConfig => CurrentJob.SharedStackCfg.Clone();
         
@@ -136,44 +131,74 @@ namespace SpitCS
                 var text = File.ReadAllText(job.FileCfg.InputFilePath, fmt.Encoding);
                 var linesIn = text.EzSplit(fmt.NewL);
 
-                Action<int, int, LineGroupType> addLineGroup = (s, e, t) =>
-                    job.LineGroups.Add(new LineGroup
-                    {
-                        InclStart = s,
-                        ExclEnd = e,
-                        Type = t,
-                    });
+                void AddLineGroup(int s, int e, LineGroupType t) =>
+                    job.LineGroups.Add(new LineGroup { InclStart = s, ExclEnd = e, Type = t });
 
-                addLineGroup(0, -1, LineGroupType.Content);
+                AddLineGroup(0, -1, LineGroupType.Content);
 
                 for (int index = 0; index < linesIn.Length; index++)
                 {
                     var line = linesIn[index];
+                    
+                    void Assert(bool b, string s) => Util.Assert(
+                        b, s,
+                        job.FileCfg.InputFileName, index + 1);
 
                     switch (job.LineGroups.Last().Type)
                     {
                         case LineGroupType.Content:
-                            if (line.Contains(fmt.StartSpitToken))
+                            var startTokenInd = line.IndexOf(fmt.StartSpitToken);
+                            if (0 < startTokenInd)
                             {
                                 job.LineGroups.Last().ExclEnd = index;
-                                addLineGroup(index, index + 1, LineGroupType.StartSpitCode);
-                                addLineGroup(index + 1, -1, LineGroupType.SpitCode);
+                                var endTokenInd = line.IndexOf(fmt.StartOutputToken);
+                                if (0 < endTokenInd)
+                                {
+                                    Assert(startTokenInd < endTokenInd, 
+                                        $"{fmt.StartOutputToken} came before {fmt.StartSpitToken}");
+                                    AddLineGroup(index, index + 1, LineGroupType.TwoLiner);
+                                    AddLineGroup(index + 1, -1, LineGroupType.SpitOutput);
+                                }
+                                else
+                                {
+                                    AddLineGroup(index, index + 1, LineGroupType.StartSpitCode);
+                                    AddLineGroup(index + 1, -1, LineGroupType.SpitCode);
+                                }
+                            }
+
+                            var startOneLinerInd = line.IndexOf(fmt.OneLinerStartSpitToken);
+
+                            if (0 < startOneLinerInd && (startTokenInd < 0))
+                            {
+                                var midOneLinerInd = line.IndexOf(fmt.OneLinerStartOutputToken);
+                                var endOneLinerInd = line.IndexOf(fmt.OneLinerEndOutputToken);
+
+                                Assert(
+                                    startOneLinerInd < midOneLinerInd,
+                                    $"{fmt.OneLinerStartSpitToken} must be followed with {fmt.OneLinerStartOutputToken}");
+                                Assert(
+                                    midOneLinerInd < endOneLinerInd,
+                                    $"{fmt.OneLinerStartOutputToken} must be followed with {fmt.OneLinerEndOutputToken}");
+
+                                job.LineGroups.Last().ExclEnd = index;
+                                AddLineGroup(index, index + 1, LineGroupType.OneLiner);
+                                AddLineGroup(index + 1, -1, LineGroupType.Content);
                             }
                             break;
                         case LineGroupType.SpitCode:
                             if (line.Contains(fmt.StartOutputToken))
                             {
                                 job.LineGroups.Last().ExclEnd = index;
-                                addLineGroup(index, index + 1, LineGroupType.StartOutput);
-                                addLineGroup(index + 1, -1, LineGroupType.SpitOutput);
+                                AddLineGroup(index, index + 1, LineGroupType.StartOutput);
+                                AddLineGroup(index + 1, -1, LineGroupType.SpitOutput);
                             }
                             break;
                         case LineGroupType.SpitOutput:
                             if (line.Contains(fmt.EndOutputToken))
                             {
                                 job.LineGroups.Last().ExclEnd = index;
-                                addLineGroup(index, index + 1, LineGroupType.EndOutput);
-                                addLineGroup(index + 1, -1, LineGroupType.Content);
+                                AddLineGroup(index, index + 1, LineGroupType.EndOutput);
+                                AddLineGroup(index + 1, -1, LineGroupType.Content);
                             }
                             break;
                         default:
@@ -182,102 +207,205 @@ namespace SpitCS
                 }
 
                 job.LineGroups.Last().ExclEnd = linesIn.Length;
+                var endingType = job.LineGroups.Last().Type;
 
                 Util.Assert(
-                    job.LineGroups.Last().Type == LineGroupType.Content,
-                    "Doucment ends with unclosed " + job.LineGroups.Last().Type,
+                    endingType == LineGroupType.Content || endingType == LineGroupType.OneLiner,
+                    $"Document ends with unclosed {endingType} (missing \"{fmt.EndOutputToken}\"??)",
                     job.FileCfg.InputFileName, job.LineGroups.Last().InclStart + 1);
+
+                List<LineGroup> remove = new List<LineGroup>();
 
                 foreach (var lg in job.LineGroups)
                 {
-                    lg.InLines = linesIn.Slice(lg.InclStart, lg.ExclEnd).ToList();
+                    lg.InLines = linesIn.Slice(lg.InclStart, lg.ExclEnd);
+                    //if (lg.InLines.Count == 0) { remove.Add(lg); }
+                }
+
+                foreach (var rem in remove)
+                {
+                    job.LineGroups.Remove(rem);
                 }
             }
 
             {
-                string indent = "";
-                string indentWhiteSpace = "";
+                string indent = null;
                 string oldHash = null;
-                List<string> prevOutputIndented = null;
+
+                foreach (var lineGroup in job.LineGroups)
+                {
+                    string firstLine = lineGroup.InLines.FirstOrDefault();
+
+                    switch (lineGroup.Type)
+                    {
+                        case LineGroupType.Content:
+                        case LineGroupType.OneLiner:
+                        {
+                            lineGroup.Indent = "";
+                            lineGroup.DeIndentedInLines = lineGroup.InLines;
+                        } break;
+                        case LineGroupType.StartSpitCode:
+                        {
+                            var tokenInd = firstLine.IndexOf(fmt.StartSpitToken);
+                            Util.Assert(
+                                tokenInd + fmt.StartSpitToken.Length == firstLine.Length,
+                                $"Line cannot contain anything after {fmt.StartSpitToken}",
+                                job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
+                            indent = firstLine.Substring(0, tokenInd);
+                            
+                        } break;
+                        case LineGroupType.TwoLiner:
+                        {
+                            var tokenInd = firstLine.IndexOf(fmt.StartSpitToken);
+                            indent = firstLine.Substring(0, tokenInd);
+                        } break;
+                        case LineGroupType.SpitCode: {
+                        } break;
+                        case LineGroupType.StartOutput: {
+                            Util.Assert(
+                                firstLine == $"{indent}{fmt.StartOutputToken}",
+                                "Line with {fmt.StartOutputToken} should contain it, indent, and nothign else",
+                                job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
+                        } break;
+                        case LineGroupType.SpitOutput: {
+                            lineGroup.Indent = Regex.Replace(indent, @"[^\s]", " ");
+                        } break;
+                        case LineGroupType.EndOutput: {
+                            Util.Assert(
+                                firstLine.StartsWith($"{indent}{fmt.EndOutputToken}"),
+                                "Indent mismatch",
+                                job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
+                            string restOfLine = firstLine.Substring(indent.Length + fmt.EndOutputToken.Length).Trim();
+
+                            Util.Assert(!restOfLine.StartsWith(fmt.HashInfix) || restOfLine.Contains(oldHash),
+                                "Code preceding hash does not match hash, which means that generated code has been edited.\n" +
+                                "Undo changes or remove Hash",
+                                job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
+                        } break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+
+                    lineGroup.Indent = lineGroup.Indent ?? indent;
+                    lineGroup.DeIndentedInLines = lineGroup.DeIndentedInLines
+                        ?? lineGroup.InLines.Select(l =>
+                        {
+                            Util.Assert(l.StartsWith(lineGroup.Indent), "Line not indented");
+                            return l.Substring(lineGroup.Indent.Length);
+                        }).ToList();
+
+                    if (lineGroup.Type == LineGroupType.SpitOutput)
+                    {
+                        oldHash = Util.CalculateMD5Hash(lineGroup.DeIndentedInLines.AggLines(fmt.NewL));
+                    }
+                }
+            }
+
+            {
+                string RunAndRtrn(string code, string file, int lineNumber)
+                {
+                    ScriptState = Eval(code, file, lineNumber);
+                    var returnValue = ScriptState.ReturnValue;
+                    var returnValueScriptState = returnValue as OneTimeScriptState;
+
+                    // SpitLoad or SpitEval
+                    if (returnValueScriptState != null)
+                    {
+                        ScriptState = returnValueScriptState.ScriptState;
+                    }
+                    else if (returnValue != null)
+                    {
+                        return returnValue.ToString();
+                    }
+
+                    return null;
+                }
+
                 int prevCodeStartLine = -1;
 
                 foreach (var lineGroup in job.LineGroups)
                 {
                     switch (lineGroup.Type)
                     {
-                        case LineGroupType.Content:
-                        {
+                        case LineGroupType.Content: {
                             job.PrevContentLines = lineGroup.InLines;
-                            lineGroup.OutLines = lineGroup.InLines;
                         } break;
-                        case LineGroupType.SpitCode:
+                        case LineGroupType.OneLiner:
                         {
-                            job.PrevCodeLines = lineGroup.InLines.Select(l =>
+                            var firstLine = lineGroup.InLines[0];
+                            var startInd = firstLine.IndexOf(fmt.OneLinerStartSpitToken);
+                            var midInd = firstLine.IndexOf(fmt.OneLinerStartOutputToken);
+                            var endInd = firstLine.IndexOf(fmt.OneLinerEndOutputToken);
+                            var startIndRight = startInd + fmt.OneLinerStartSpitToken.Length;
+                            var midIndRight = midInd + fmt.OneLinerStartOutputToken.Length;
+                            var endIndRight = endInd + fmt.OneLinerEndOutputToken.Length;
+                            var code = firstLine.Substring(startIndRight, midInd - startIndRight);
+                            var oldOutput = firstLine.Substring(midIndRight, endInd - midIndRight);
+                            var output = RunAndRtrn(code, job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
+                            // TODO this is shameful
+                            lineGroup.DeIndentedOutLines = new[]
                             {
-                                Util.Assert(l.Contains(indent), "Line not indented",
-                                    job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
-                                return indent.Length == 0 ? "" : l.Replace(indent, "");
-                            }).ToList();
-                            lineGroup.OutLines = lineGroup.InLines;
+                                firstLine.Substring(0, startInd),
+                                code,
+                                output,
+                                firstLine.Substring(endIndRight, firstLine.Length - endIndRight),
+                            };
+                            // TODO this is shameful
+                            lineGroup.DeIndentedInLines = new[]
+                            {
+                                firstLine.Substring(0, startInd),
+                                code,
+                                oldOutput,
+                                firstLine.Substring(endIndRight, firstLine.Length - endIndRight),
+                            };
+                        } break;
+                        case LineGroupType.StartSpitCode: {
+                            lineGroup.DeIndentedOutLines = fmt.StartSpitToken.Array1();
+                        } break;
+                        case LineGroupType.TwoLiner:
+                        {
+                            var firstLine = lineGroup.InLines[0];
+                            var startInd = firstLine.IndexOf(fmt.StartSpitToken);
+                            var midInd = firstLine.IndexOf(fmt.StartOutputToken);
+                            var startIndRight = startInd + fmt.StartSpitToken.Length;
+                            var code = firstLine.Substring(startIndRight, midInd - startIndRight);
+                            lineGroup.DeIndentedOutLines = code.Array1();
+                            job.PrevCodeLines = lineGroup.DeIndentedOutLines;
                             prevCodeStartLine = lineGroup.StartingLineNumber;
                         } break;
-                        case LineGroupType.SpitOutput:
-                        {
-                            oldHash = Util.CalculateMD5Hash(lineGroup.InLines.AggLines());
+                        case LineGroupType.SpitCode: {
+                            job.PrevCodeLines = lineGroup.DeIndentedInLines;
+                            prevCodeStartLine = lineGroup.StartingLineNumber;
+                        } break;
+                        case LineGroupType.StartOutput:
+                            break;
+                        case LineGroupType.SpitOutput: {
+                            // TODO past output
                             job.SpitOut = new StringWriter();
-                            StringBuilder codeSb = new StringBuilder();
+                            var codeSb = new StringBuilder();
                             int lineNumber = prevCodeStartLine;
-                            codeSb.AppendLine($"#line {lineNumber} \"{job.FileCfg.InputFileName}\"");
                             
-                            void RunCollectedCode()
+                            foreach (var ind in Enumerable.Range(0, job.PrevCodeLines.Count))
                             {
-                                OneTimeScriptState.CheckInstancesDisposed();
-                                ScriptState = Eval(codeSb.ToString());
-                                codeSb.Clear();
-                                var returnValue = ScriptState.ReturnValue;
-                                var returnValueScriptState = returnValue as OneTimeScriptState;
+                                var lineCpy = job.PrevCodeLines[ind];
 
-                                // SpitLoad or SpitEval
-                                if (returnValueScriptState != null)
+                                if (lineCpy.StartsWith(fmt.ForceDirective))
                                 {
-                                    ScriptState = returnValueScriptState.ScriptState;
+                                    lineCpy = lineCpy.Replace(fmt.ForceDirective, "");
                                 }
-                                else if (returnValue != null)
-                                {
-                                    job.SpitOut.WriteLine(returnValue);
-                                }
+                                else if (job.FileCfg.ShallSkipCompute) { continue; }
 
-                                codeSb.AppendLine($"#line {lineNumber + 1} \"{job.FileCfg.InputFileName}\"");
+                                if (lineCpy.Contains(fmt.YieldDirective) || ind == job.PrevCodeLines.Count - 1)
+                                {
+                                    codeSb.AppendLine(lineCpy.Replace(fmt.YieldDirective, ""));
+                                    var output = RunAndRtrn(codeSb.ToString(), fileCfg.InputFileName, lineNumber);
+                                    if (output != null) { job.SpitOut.WriteLine(output); }
+                                    codeSb.Clear();
+                                    lineNumber = prevCodeStartLine + ind + 1;
+                                }
+                                else { codeSb.AppendLine(lineCpy); }
                             }
 
-                            string latestReturnValue = null;
-
-                            foreach (var line in job.PrevCodeLines)
-                            {
-                                bool forced = false, yield = false;
-                                string trimmedLine = line.Trim();
-
-                                if (trimmedLine.StartsWith(fmt.ForceDirective))
-                                {
-                                    forced = true;
-                                    trimmedLine = trimmedLine.Replace(fmt.ForceDirective, "");
-                                }
-
-                                if (job.FileCfg.ShallSkipCompute && !forced) { continue; }
-
-                                if (trimmedLine.StartsWith(fmt.YieldDirective))
-                                {
-                                    yield = true;
-                                    trimmedLine = trimmedLine.Replace(fmt.YieldDirective, "");
-                                }
-
-                                codeSb.AppendLine(trimmedLine);
-
-                                if (yield) { RunCollectedCode(); }
-                                lineNumber++;
-                            }
-
-                            RunCollectedCode();
                             var outputUnindented = job.SpitOut.GetStringBuilder().ToString();
 
                             if (outputUnindented.EndsWith(Environment.NewLine))
@@ -288,53 +416,19 @@ namespace SpitCS
 
                             job.SpitOut.Dispose();
                             job.SpitOut = null;
-                            job.PrevOutputLines = outputUnindented.EzSplit(Environment.NewLine).ToList();
-                            prevOutputIndented = job.PrevOutputLines.Select(line => indentWhiteSpace + line).ToList();
-                            lineGroup.OutLines = prevOutputIndented;
+                            lineGroup.DeIndentedOutLines = outputUnindented.EzSplit(fmt.NewL).ToList();
+                            job.PrevOutputLines = lineGroup.DeIndentedOutLines;
                         } break;
                         case LineGroupType.EndOutput:
                         {
-                            var markerInd = lineGroup.InLines.First().IndexOf(fmt.EndOutputToken);
-                            var indent1 = lineGroup.InLines.First().Substring(0, markerInd);
-                            Util.Assert(indent == indent1, "indent mismatch",
-                                job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
-
-                            string lastOutputHash = Util.CalculateMD5Hash(prevOutputIndented.AggLines());
-
-                            var line = lineGroup.InLines.Last();
-                            var match = Regex.Match(line, fmt.HashRegex);
-                            if (match.Success)
-                            {
-                                line = line.Replace(match.Value, "");
-                                Util.Assert(match.Groups[1].Value == oldHash,
-                                    "Code preceding hash does not match hash, which means that generated code has been edited.\n" +
-                                    "Undo changes or remove Hash",
-                                    job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
-                            }
-
-                            lineGroup.OutLines = new List<string>
-                            {
-                                $"{line}{fmt.FmtHash(lastOutputHash)}"
-                            };
-                        } break;
-                        case LineGroupType.StartSpitCode:
-                        {
-                            var markerInd = lineGroup.InLines.First().IndexOf(fmt.StartSpitToken);
-                            indent = lineGroup.InLines.First().Substring(0, markerInd);
-                            indentWhiteSpace = "".PadRight(indent.Length);
-                            lineGroup.OutLines = lineGroup.InLines;
-                        } break;
-                        case LineGroupType.StartOutput:
-                        {
-                            var markerInd = lineGroup.InLines.First().IndexOf(fmt.StartOutputToken);
-                            var indent1 = lineGroup.InLines.First().Substring(0, markerInd);
-                            Util.Assert(indent == indent1, "indent mismatch", job.FileCfg.InputFileName,
-                                lineGroup.StartingLineNumber);
-                            lineGroup.OutLines = lineGroup.InLines;
+                            var hash = Util.CalculateMD5Hash(job.PrevOutputLines.AggLines(fmt.NewL));
+                            lineGroup.DeIndentedOutLines = $"{fmt.EndOutputToken}{fmt.HashInfix} {hash}".Array1();
                         } break;
                         default:
                             throw new ArgumentOutOfRangeException();
                     }
+                    lineGroup.DeIndentedOutLines = lineGroup.DeIndentedOutLines ?? lineGroup.DeIndentedInLines;
+                    OneTimeScriptState.CheckInstancesDisposed();
                 }
             }
 
@@ -350,79 +444,118 @@ namespace SpitCS
         {
             foreach (var job in jobWriteList)
             {
-                if (!job.FileCfg.ShallDeleteOutput
-                    && !job.FileCfg.ShallDeleteSpitCode
-                    && !job.FileCfg.ShallGenerate)
-                {
-                    return;
-                }
+                bool deleteOutput = job.FileCfg.ShallDeleteOutput;
+                bool deleteSpitCode = job.FileCfg.ShallDeleteSpitCode;
+                bool generate = job.FileCfg.ShallGenerate;
+
+                if (!deleteOutput && !deleteSpitCode && !generate) { return; }
 
                 var fmt = job.FileCfg.FormatCfg;
 
                 using (var writer = new StreamWriter(job.FileCfg.OutputFilePath, false, fmt.Encoding))
                 {
+                    writer.NewLine = fmt.NewL;
+
                     foreach (var lineGroup in job.LineGroups)
                     {
-                        IEnumerable<string> writtenLines = lineGroup.OutLines;
+                        IList<string> writtenUnindentLines = lineGroup.DeIndentedOutLines;
 
-                        switch (lineGroup.Type)
+                        switch (lineGroup.Type) // TODO xLiner
                         {
+                            case LineGroupType.Content:
+                                break;
+                            case LineGroupType.OneLiner:
+                            {
+                                Util.Assert(lineGroup.DeIndentedOutLines.Count == 4, "!!!");
+                                var outSegs = lineGroup.DeIndentedOutLines;
+                                var inSegs = lineGroup.DeIndentedInLines;
+                                var sb = new StringBuilder($"{outSegs[0]}");
+                                sb.Append(deleteSpitCode ? "" : fmt.OneLinerStartSpitToken);
+                                sb.Append(deleteSpitCode ? "" : outSegs[1]);
+                                sb.Append(deleteSpitCode
+                                    ? fmt.OneLinerColdStartOutputToken
+                                    : fmt.OneLinerStartOutputToken);
+                                sb.Append(deleteOutput
+                                    ? ""
+                                    : (generate ? outSegs[2] : inSegs[2]));
+                                sb.Append(deleteSpitCode ? fmt.OneLinerColdEndOutputToken : fmt.OneLinerEndOutputToken);
+                                sb.Append(outSegs[3]);
+                                writtenUnindentLines = sb.ToString().Array1();
+                            } break;
+                            case LineGroupType.TwoLiner:
+                            {
+                                var code = lineGroup.DeIndentedOutLines[0];
+                                writtenUnindentLines = !deleteSpitCode
+                                    ? $"{fmt.StartSpitToken}{code}{fmt.StartOutputToken}".Array1()
+                                    : fmt.ColdStartOutputToken.Array1();
+                            } break;
+                            case LineGroupType.StartSpitCode:
+                            {
+                                if (deleteSpitCode) { writtenUnindentLines = null; }
+                            } break;
                             case LineGroupType.SpitCode:
                             {
-                                if (job.FileCfg.ShallDeleteSpitCode) { writtenLines = null; }
+                                if (deleteSpitCode) { writtenUnindentLines = null; }
+                            } break;
+                            case LineGroupType.StartOutput:
+                            {
+                                if (deleteSpitCode)
+                                {
+                                    writtenUnindentLines = fmt.ColdStartOutputToken.Array1();
+                                }
                             } break;
                             case LineGroupType.SpitOutput:
                             {
-                                if (!job.FileCfg.ShallGenerate) { writtenLines = lineGroup.InLines; }
-                                if (job.FileCfg.ShallDeleteOutput) { writtenLines = null; }
+                                if (!generate) { writtenUnindentLines = lineGroup.DeIndentedInLines; }
+                                if (deleteOutput) { writtenUnindentLines = null; }
                             } break;
                             case LineGroupType.EndOutput:
                             {
                                 // If user has elected not to generate, leave prev line (possibly including hash) alone
-                                if (!job.FileCfg.ShallGenerate) { writtenLines = lineGroup.InLines; }
+                                if (!generate) { writtenUnindentLines = lineGroup.DeIndentedInLines; }
 
                                 // If user wants output deleted, strip hash value from line (no matter the source)
+                                // Same if 
                                 // This is an unusual case :/
-                                if (job.FileCfg.ShallDeleteOutput)
+                                if (deleteOutput || (job.FileCfg.InputFilePath != job.FileCfg.OutputFilePath))
                                 {
-                                    writtenLines = writtenLines.Select(l => Regex.Replace(l, fmt.HashRegex, ""));
+                                    writtenUnindentLines = $"{fmt.EndOutputToken}".Array1();
                                 }
 
                                 // or if spit code is deleted, replace with cold output token
-                                if (job.FileCfg.ShallDeleteSpitCode)
+                                if (deleteSpitCode)
                                 {
-                                    writtenLines = writtenLines
-                                        .Select(l => l.Replace(fmt.EndOutputToken, fmt.ColdEndOutputToken))
-                                        .Select(l => Regex.Replace(l, fmt.HashRegex, ""));
-                                }
-                            } break;
-                            case LineGroupType.StartSpitCode:
-                            {
-                                if (job.FileCfg.ShallDeleteSpitCode) { writtenLines = null; }
-                            } break;
-                            case LineGroupType.StartOutput:
-                            {
-                                if (job.FileCfg.ShallDeleteSpitCode)
-                                {
-                                    writtenLines = writtenLines
-                                        .Select(l => l.Replace(fmt.StartOutputToken, fmt.ColdStartOutputToken));
+                                    writtenUnindentLines = writtenUnindentLines.Select(
+                                        l => l.Replace(fmt.StartOutputToken, fmt.ColdStartOutputToken)).ToList();
                                 }
                             } break;
                         }
 
-                        if (writtenLines != null)
+                        bool lastGroup = lineGroup == job.LineGroups.Last();
+                        if (writtenUnindentLines != null)
                         {
-                            writer.WriteLine(writtenLines.AggLines());
+                            foreach (var ind in Enumerable.Range(0, writtenUnindentLines.Count))
+                            {
+                                if (lastGroup && (ind == writtenUnindentLines.Count - 1))
+                                {
+                                    writer.Write($"{lineGroup.Indent}{writtenUnindentLines[ind]}");
+                                }
+                                else
+                                {
+                                    writer.WriteLine($"{lineGroup.Indent}{writtenUnindentLines[ind]}");
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        public ScriptState Eval(string code)
+        public ScriptState Eval(string code, string fileName, int lineNumber)
         {
             try
             {
+                code = $"#line {lineNumber} \"{fileName}\"\n{code}";
                 return ScriptState.ContinueWithAsync(code).Result;
             }
             catch (AggregateException aggregateEx)
@@ -440,6 +573,8 @@ namespace SpitCS
         StartOutput,
         SpitOutput,
         EndOutput,
+        TwoLiner,
+        OneLiner,
     }
 
     public interface ISpitGlobals
@@ -447,10 +582,10 @@ namespace SpitCS
         string PrevContent { get; }
         string PrevOutput { get; }
         string PrevCode { get; }
-        IReadOnlyList<string> PrevContentLines { get; }
-        IReadOnlyList<string> PrevOutputLines { get; }
-        IReadOnlyList<string> PrevCodeLines { get; }
-        IReadOnlyDictionary<string, object> Defines { get; }
+        IList<string> PrevContentLines { get; }
+        IList<string> PrevOutputLines { get; }
+        IList<string> PrevCodeLines { get; }
+        IDictionary<string, object> Defines { get; }
         TextWriter SpitOut { get; }
         string AtString(string s);
         OneTimeScriptState SpitEval(
@@ -472,13 +607,13 @@ namespace SpitCS
     public class SpitJob
     {
         // Long term state
-        public readonly List<LineGroup> LineGroups = new List<LineGroup>();
+        public readonly IList<LineGroup> LineGroups = new List<LineGroup>();
 
         // Changes between blocks
         public StringWriter SpitOut;
-        public List<string> PrevCodeLines = new List<string>();
-        public List<string> PrevContentLines = new List<string>();
-        public List<string> PrevOutputLines = new List<string>();
+        public IList<string> PrevCodeLines = new List<string>();
+        public IList<string> PrevContentLines = new List<string>();
+        public IList<string> PrevOutputLines = new List<string>();
 
         // Actually used in execution
         public FileCfg FileCfg;
@@ -491,11 +626,14 @@ namespace SpitCS
 
     public class LineGroup
     {
-        public List<string> InLines;
-        public List<string> OutLines;
+        public IList<string> InLines;
+        public IList<string> OutLines;
+        public IList<string> DeIndentedInLines;
+        public IList<string> DeIndentedOutLines;
         public LineGroupType Type;
         public int InclStart;
         public int ExclEnd = -1;
+        public string Indent;
 
         public int StartingLineNumber => InclStart + 1;
 
@@ -509,7 +647,7 @@ namespace SpitCS
 
     public class OneTimeScriptState : IDisposable
     {
-        private static readonly List<OneTimeScriptState> Instances = new List<OneTimeScriptState>();
+        private static readonly IList<OneTimeScriptState> Instances = new List<OneTimeScriptState>();
 
         public string FileCreated { get; }
         public int LineNumberCreated { get; }
