@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26430.13
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpitCS", "SpitCS\SpitCS.csproj", "{2AC11F75-75E4-42E0-B880-D21DCD03B996}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Whomst", "Whomst\Whomst.csproj", "{2AC11F75-75E4-42E0-B880-D21DCD03B996}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

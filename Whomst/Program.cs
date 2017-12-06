@@ -17,9 +17,10 @@ using System.Security.Cryptography;
  * Yield not at beginning of line??
  * No hash when InFile != OutFile
  * Dubious restriction on stuff same line as start/end tokens
+ * Remove unnecessary dependencies
  */
 
-namespace SpitCS
+namespace Whomst
 {
     public class Program
     {
@@ -37,7 +38,7 @@ namespace SpitCS
                 }
                 catch (Exception e)
                 {
-                    var defaultCfgFile = "spit-default.json";
+                    var defaultCfgFile = "whomst-default.json";
                     var excMessage = $"Could not load config file {cfgFilename}.";
                     var helpfulMessage = excMessage
                         + $"Generating {defaultCfgFile}. Use it with /cfg={defaultCfgFile})";
@@ -54,8 +55,8 @@ namespace SpitCS
                 }
             }
 
-            // NOTE cfg.PrepareForUse unnecessary, will get called in SpitJob ctor
-            SpitGlobalJob.Execute(fileCfg, stackCfg);
+            // NOTE cfg.PrepareForUse unnecessary, will get called in WhomstJob ctor
+            WhomstGlobalJob.Execute(fileCfg, stackCfg);
         }
 
         public static FileCfg ParseCommandLine(string[] args, out string jsonFilename)
@@ -66,15 +67,15 @@ namespace SpitCS
 
             var options = new OptionSet
             {
-                { "i|input=",    "the file to preprocess",          i => firstJob.InputFileName = i            },
-                { "g|generate",  "generate code",                   g => firstJob.Generate = (g != null)       },
-                { "c|clean",     "deletes generated code",          c => firstJob.DeleteOutput = (c != null)   },
-                { "p|private",   "deletes spit generator code",     p => firstJob.DeleteSpitCode = (p != null) },
-                { "cfg|config=", "json file holding configuration", f => jsonFilenameLocal = f                 },
-                { "h|help",      "show this message and exit",      v => showHelp = (v != null)                },
+                { "i|input=",    "the file to preprocess",          i => firstJob.InputFileName = i                },
+                { "g|generate",  "generate code",                   g => firstJob.Generate = (g != null)           },
+                { "c|clean",     "deletes generated code",          c => firstJob.DeleteOutput = (c != null)       },
+                { "p|private",   "deletes whomst generator code",     p => firstJob.DeleteCode = (p != null) },
+                { "cfg|config=", "json file holding configuration", f => jsonFilenameLocal = f                     },
+                { "h|help",      "show this message and exit",      v => showHelp = (v != null)                    },
                 {
                     "x|skip",
-                    "doesn't evaluate spit code (and therefore does not generate it). Still tries to eval lines beginning " +
+                    "doesn't evaluate whomst code (and therefore does not generate it). Still tries to eval lines beginning " +
                     $"with force directive (default  \"{FormatCfg.Default().ForceDirective}\"",
                     x => firstJob.SkipCompute = (x != null)
                 },
@@ -112,7 +113,7 @@ namespace SpitCS
         {
             if (!condition)
             {
-                throw new Exception($"SpitError at {sourceFile}({lineNumber},0): {message}");
+                throw new Exception($"{nameof(Whomst)}Error at {sourceFile}({lineNumber},0): {message}");
             }
         }
 
@@ -122,7 +123,7 @@ namespace SpitCS
         {
             if (!condition)
             {
-                Console.Error.WriteLine($"SpitWarning at {sourceFile}({lineNumber},0): {message}");
+                Console.Error.WriteLine($"{nameof(Whomst)}Warning at {sourceFile}({lineNumber},0): {message}");
             }
         }
 

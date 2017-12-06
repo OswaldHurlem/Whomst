@@ -9,9 +9,9 @@ using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 
-namespace SpitCS
+namespace Whomst
 {
-    public class SpitGlobalJob : ISpitGlobals
+    public class WhomstGlobalJob : IWhomstGlobals
     {
         public ScriptState ScriptState = null;
 
@@ -20,37 +20,37 @@ namespace SpitCS
         public readonly HashSet<string> Includes = new HashSet<string>();
         public readonly HashSet<string> Assemblies = new HashSet<string>();
         public readonly HashSet<string> Usings = new HashSet<string>();
-        public readonly List<SpitJob> jobWriteList = new List<SpitJob>();
-        public readonly Stack<SpitJob> jobStack = new Stack<SpitJob>();
+        public readonly List<WhomstJob> jobWriteList = new List<WhomstJob>();
+        public readonly Stack<WhomstJob> jobStack = new Stack<WhomstJob>();
 
-        public ISpitGlobals Globals => this;
+        public IWhomstGlobals Globals => this;
 
-        public SpitJob CurrentJob => jobStack.Peek();
+        public WhomstJob CurrentJob => jobStack.Peek();
 
-        #region ISpitGlobals implementation
-        IList<string> ISpitGlobals.PrevCodeLines => CurrentJob.PrevCodeLines;
-        IList<string> ISpitGlobals.PrevContentLines => CurrentJob.PrevContentLines;
-        IList<string> ISpitGlobals.PrevOutputLines => CurrentJob.PrevOutputLines;
-        string ISpitGlobals.PrevCode => CurrentJob.PrevCodeLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
-        string ISpitGlobals.PrevContent => CurrentJob.PrevContentLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
-        string ISpitGlobals.PrevOutput => CurrentJob.PrevOutputLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
-        TextWriter ISpitGlobals.SpitOut => CurrentJob.SpitOut;
-        string ISpitGlobals.AtString(string s) => Util.AtString(s, CurrentJob.FileCfg.FormatCfg.NewL);
-        IDictionary<string, object> ISpitGlobals.Defines => CurrentJob.FileCfg.Defines;
-        OneTimeScriptState ISpitGlobals.SpitEval(string code, string src, int ln) =>
+        #region IWhomstGlobals implementation
+        IList<string> IWhomstGlobals.PrevCodeLines => CurrentJob.PrevCodeLines;
+        IList<string> IWhomstGlobals.PrevContentLines => CurrentJob.PrevContentLines;
+        IList<string> IWhomstGlobals.PrevOutputLines => CurrentJob.PrevOutputLines;
+        string IWhomstGlobals.PrevCode => CurrentJob.PrevCodeLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
+        string IWhomstGlobals.PrevContent => CurrentJob.PrevContentLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
+        string IWhomstGlobals.PrevOutput => CurrentJob.PrevOutputLines.AggLines(CurrentJob.FileCfg.FormatCfg.NewL);
+        TextWriter IWhomstGlobals.WhomstOut => CurrentJob.WhomstOut;
+        string IWhomstGlobals.AtString(string s) => Util.AtString(s, CurrentJob.FileCfg.FormatCfg.NewL);
+        IDictionary<string, object> IWhomstGlobals.Defines => CurrentJob.FileCfg.Defines;
+        OneTimeScriptState IWhomstGlobals.WhostEval(string code, string src, int ln) =>
             new OneTimeScriptState(Eval(code, src, ln), src, ln);
-        FileCfg ISpitGlobals.FileConfig => CurrentJob.SharedFileCfg.Clone();
-        StackCfg ISpitGlobals.StackConfig => CurrentJob.SharedStackCfg.Clone();
+        FileCfg IWhomstGlobals.FileConfig => CurrentJob.SharedFileCfg.Clone();
+        StackCfg IWhomstGlobals.StackConfig => CurrentJob.SharedStackCfg.Clone();
         
-        OneTimeScriptState ISpitGlobals.SpitLoad(
+        OneTimeScriptState IWhomstGlobals.WhomstLoad(
             string inputFile, string outputFile, FileOp operations,
             string src, int ln)
         {
             var fileCfg = Globals.FileConfig.SetFile(inputFile, outputFile).SetOperations(operations);
-            return Globals.SpitLoad(fileCfg, Globals.StackConfig);
+            return Globals.WhomstLoad(fileCfg, Globals.StackConfig);
         }
 
-        OneTimeScriptState ISpitGlobals.SpitLoad(FileCfg fileCfg, StackCfg stackCfg,
+        OneTimeScriptState IWhomstGlobals.WhomstLoad(FileCfg fileCfg, StackCfg stackCfg,
             string src, int ln)
         {
             RunJob(fileCfg, stackCfg ?? CurrentJob.StackCfg.Clone());
@@ -60,14 +60,14 @@ namespace SpitCS
 
         public static void Execute(FileCfg fileCfg, StackCfg stackCfg)
         {
-            var runner = new SpitGlobalJob();
+            var runner = new WhomstGlobalJob();
             runner.RunJob(fileCfg, stackCfg);
             runner.WriteFiles();
         }
 
         public void RunJob(FileCfg fileCfg, StackCfg stackCfg)
         {
-            var job = new SpitJob
+            var job = new WhomstJob
             {
                 SharedStackCfg = stackCfg,
                 SharedFileCfg = fileCfg,
@@ -91,14 +91,14 @@ namespace SpitCS
                                 .WithSearchPaths(RuntimeEnvironment.GetRuntimeDirectory())
                                 .WithSearchPaths(job.StackCfg.Includes)
                             ).WithEmitDebugInformation(true),
-                        this, typeof(ISpitGlobals)).Result;
+                        this, typeof(IWhomstGlobals)).Result;
                 }
                 else
                 {
                     foreach (var incl in job.StackCfg.Includes.Where(i => Includes.Add(i)))
                     {
                         Util.AssertWarning(false,
-                            $"Could not add include directory {incl} midway through Spit execution");
+                            $"Could not add include directory {incl} midway through Whomst execution");
                     }
                 }
 
@@ -147,7 +147,7 @@ namespace SpitCS
                     switch (job.LineGroups.Last().Type)
                     {
                         case LineGroupType.Content:
-                            var startTokenInd = line.IndexOf(fmt.StartSpitToken);
+                            var startTokenInd = line.IndexOf(fmt.StartCodeToken);
                             if (0 < startTokenInd)
                             {
                                 job.LineGroups.Last().ExclEnd = index;
@@ -155,18 +155,18 @@ namespace SpitCS
                                 if (0 < endTokenInd)
                                 {
                                     Assert(startTokenInd < endTokenInd, 
-                                        $"{fmt.StartOutputToken} came before {fmt.StartSpitToken}");
+                                        $"{fmt.StartOutputToken} came before {fmt.StartCodeToken}");
                                     AddLineGroup(index, index + 1, LineGroupType.TwoLiner);
-                                    AddLineGroup(index + 1, -1, LineGroupType.SpitOutput);
+                                    AddLineGroup(index + 1, -1, LineGroupType.GenOutput);
                                 }
                                 else
                                 {
-                                    AddLineGroup(index, index + 1, LineGroupType.StartSpitCode);
-                                    AddLineGroup(index + 1, -1, LineGroupType.SpitCode);
+                                    AddLineGroup(index, index + 1, LineGroupType.StartCode);
+                                    AddLineGroup(index + 1, -1, LineGroupType.WhomstCode);
                                 }
                             }
 
-                            var startOneLinerInd = line.IndexOf(fmt.OneLinerStartSpitToken);
+                            var startOneLinerInd = line.IndexOf(fmt.OneLinerStartCodeToken);
 
                             if (0 < startOneLinerInd && (startTokenInd < 0))
                             {
@@ -175,7 +175,7 @@ namespace SpitCS
 
                                 Assert(
                                     startOneLinerInd < midOneLinerInd,
-                                    $"{fmt.OneLinerStartSpitToken} must be followed with {fmt.OneLinerStartOutputToken}");
+                                    $"{fmt.OneLinerStartCodeToken} must be followed with {fmt.OneLinerStartOutputToken}");
                                 Assert(
                                     midOneLinerInd < endOneLinerInd,
                                     $"{fmt.OneLinerStartOutputToken} must be followed with {fmt.OneLinerEndOutputToken}");
@@ -185,15 +185,15 @@ namespace SpitCS
                                 AddLineGroup(index + 1, -1, LineGroupType.Content);
                             }
                             break;
-                        case LineGroupType.SpitCode:
+                        case LineGroupType.WhomstCode:
                             if (line.Contains(fmt.StartOutputToken))
                             {
                                 job.LineGroups.Last().ExclEnd = index;
                                 AddLineGroup(index, index + 1, LineGroupType.StartOutput);
-                                AddLineGroup(index + 1, -1, LineGroupType.SpitOutput);
+                                AddLineGroup(index + 1, -1, LineGroupType.GenOutput);
                             }
                             break;
-                        case LineGroupType.SpitOutput:
+                        case LineGroupType.GenOutput:
                             if (line.Contains(fmt.EndOutputToken))
                             {
                                 job.LineGroups.Last().ExclEnd = index;
@@ -244,22 +244,22 @@ namespace SpitCS
                             lineGroup.Indent = "";
                             lineGroup.DeIndentedInLines = lineGroup.InLines;
                         } break;
-                        case LineGroupType.StartSpitCode:
+                        case LineGroupType.StartCode:
                         {
-                            var tokenInd = firstLine.IndexOf(fmt.StartSpitToken);
+                            var tokenInd = firstLine.IndexOf(fmt.StartCodeToken);
                             Util.Assert(
-                                tokenInd + fmt.StartSpitToken.Length == firstLine.Length,
-                                $"Line cannot contain anything after {fmt.StartSpitToken}",
+                                tokenInd + fmt.StartCodeToken.Length == firstLine.Length,
+                                $"Line cannot contain anything after {fmt.StartCodeToken}",
                                 job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
                             indent = firstLine.Substring(0, tokenInd);
                             
                         } break;
                         case LineGroupType.TwoLiner:
                         {
-                            var tokenInd = firstLine.IndexOf(fmt.StartSpitToken);
+                            var tokenInd = firstLine.IndexOf(fmt.StartCodeToken);
                             indent = firstLine.Substring(0, tokenInd);
                         } break;
-                        case LineGroupType.SpitCode: {
+                        case LineGroupType.WhomstCode: {
                         } break;
                         case LineGroupType.StartOutput: {
                             Util.Assert(
@@ -267,7 +267,7 @@ namespace SpitCS
                                 "Line with {fmt.StartOutputToken} should contain it, indent, and nothign else",
                                 job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
                         } break;
-                        case LineGroupType.SpitOutput: {
+                        case LineGroupType.GenOutput: {
                             lineGroup.Indent = Regex.Replace(indent, @"[^\s]", " ");
                         } break;
                         case LineGroupType.EndOutput: {
@@ -294,7 +294,7 @@ namespace SpitCS
                             return l.Substring(lineGroup.Indent.Length);
                         }).ToList();
 
-                    if (lineGroup.Type == LineGroupType.SpitOutput)
+                    if (lineGroup.Type == LineGroupType.GenOutput)
                     {
                         oldHash = Util.CalculateMD5Hash(lineGroup.DeIndentedInLines.AggLines(fmt.NewL));
                     }
@@ -308,7 +308,7 @@ namespace SpitCS
                     var returnValue = ScriptState.ReturnValue;
                     var returnValueScriptState = returnValue as OneTimeScriptState;
 
-                    // SpitLoad or SpitEval
+                    // WhomstLoad or WhomstEval
                     if (returnValueScriptState != null)
                     {
                         ScriptState = returnValueScriptState.ScriptState;
@@ -333,10 +333,10 @@ namespace SpitCS
                         case LineGroupType.OneLiner:
                         {
                             var firstLine = lineGroup.InLines[0];
-                            var startInd = firstLine.IndexOf(fmt.OneLinerStartSpitToken);
+                            var startInd = firstLine.IndexOf(fmt.OneLinerStartCodeToken);
                             var midInd = firstLine.IndexOf(fmt.OneLinerStartOutputToken);
                             var endInd = firstLine.IndexOf(fmt.OneLinerEndOutputToken);
-                            var startIndRight = startInd + fmt.OneLinerStartSpitToken.Length;
+                            var startIndRight = startInd + fmt.OneLinerStartCodeToken.Length;
                             var midIndRight = midInd + fmt.OneLinerStartOutputToken.Length;
                             var endIndRight = endInd + fmt.OneLinerEndOutputToken.Length;
                             var code = firstLine.Substring(startIndRight, midInd - startIndRight);
@@ -359,29 +359,29 @@ namespace SpitCS
                                 firstLine.Substring(endIndRight, firstLine.Length - endIndRight),
                             };
                         } break;
-                        case LineGroupType.StartSpitCode: {
-                            lineGroup.DeIndentedOutLines = fmt.StartSpitToken.Array1();
+                        case LineGroupType.StartCode: {
+                            lineGroup.DeIndentedOutLines = fmt.StartCodeToken.Array1();
                         } break;
                         case LineGroupType.TwoLiner:
                         {
                             var firstLine = lineGroup.InLines[0];
-                            var startInd = firstLine.IndexOf(fmt.StartSpitToken);
+                            var startInd = firstLine.IndexOf(fmt.StartCodeToken);
                             var midInd = firstLine.IndexOf(fmt.StartOutputToken);
-                            var startIndRight = startInd + fmt.StartSpitToken.Length;
+                            var startIndRight = startInd + fmt.StartCodeToken.Length;
                             var code = firstLine.Substring(startIndRight, midInd - startIndRight);
                             lineGroup.DeIndentedOutLines = code.Array1();
                             job.PrevCodeLines = lineGroup.DeIndentedOutLines;
                             prevCodeStartLine = lineGroup.StartingLineNumber;
                         } break;
-                        case LineGroupType.SpitCode: {
+                        case LineGroupType.WhomstCode: {
                             job.PrevCodeLines = lineGroup.DeIndentedInLines;
                             prevCodeStartLine = lineGroup.StartingLineNumber;
                         } break;
                         case LineGroupType.StartOutput:
                             break;
-                        case LineGroupType.SpitOutput: {
+                        case LineGroupType.GenOutput: {
                             // TODO past output
-                            job.SpitOut = new StringWriter();
+                            job.WhomstOut = new StringWriter();
                             var codeSb = new StringBuilder();
                             int lineNumber = prevCodeStartLine;
                             
@@ -399,14 +399,14 @@ namespace SpitCS
                                 {
                                     codeSb.AppendLine(lineCpy.Replace(fmt.YieldDirective, ""));
                                     var output = RunAndRtrn(codeSb.ToString(), fileCfg.InputFileName, lineNumber);
-                                    if (output != null) { job.SpitOut.WriteLine(output); }
+                                    if (output != null) { job.WhomstOut.WriteLine(output); }
                                     codeSb.Clear();
                                     lineNumber = prevCodeStartLine + ind + 1;
                                 }
                                 else { codeSb.AppendLine(lineCpy); }
                             }
 
-                            var outputUnindented = job.SpitOut.GetStringBuilder().ToString();
+                            var outputUnindented = job.WhomstOut.GetStringBuilder().ToString();
 
                             if (outputUnindented.EndsWith(Environment.NewLine))
                             {
@@ -414,8 +414,8 @@ namespace SpitCS
                                     outputUnindented.Substring(0, outputUnindented.Length - Environment.NewLine.Length);
                             }
 
-                            job.SpitOut.Dispose();
-                            job.SpitOut = null;
+                            job.WhomstOut.Dispose();
+                            job.WhomstOut = null;
                             lineGroup.DeIndentedOutLines = outputUnindented.EzSplit(fmt.NewL).ToList();
                             job.PrevOutputLines = lineGroup.DeIndentedOutLines;
                         } break;
@@ -433,7 +433,7 @@ namespace SpitCS
             }
 
             // Invalidating stuff which I know I don't want to be used again
-            job.SpitOut = null;
+            job.WhomstOut = null;
             job.PrevCodeLines = null;
             job.PrevContentLines = null;
             job.PrevOutputLines = null;
@@ -445,10 +445,10 @@ namespace SpitCS
             foreach (var job in jobWriteList)
             {
                 bool deleteOutput = job.FileCfg.ShallDeleteOutput;
-                bool deleteSpitCode = job.FileCfg.ShallDeleteSpitCode;
+                bool deleteCode = job.FileCfg.ShallDeleteCode;
                 bool generate = job.FileCfg.ShallGenerate;
 
-                if (!deleteOutput && !deleteSpitCode && !generate) { return; }
+                if (!deleteOutput && !deleteCode && !generate) { return; }
 
                 var fmt = job.FileCfg.FormatCfg;
 
@@ -470,41 +470,41 @@ namespace SpitCS
                                 var outSegs = lineGroup.DeIndentedOutLines;
                                 var inSegs = lineGroup.DeIndentedInLines;
                                 var sb = new StringBuilder($"{outSegs[0]}");
-                                sb.Append(deleteSpitCode ? "" : fmt.OneLinerStartSpitToken);
-                                sb.Append(deleteSpitCode ? "" : outSegs[1]);
-                                sb.Append(deleteSpitCode
+                                sb.Append(deleteCode ? "" : fmt.OneLinerStartCodeToken);
+                                sb.Append(deleteCode ? "" : outSegs[1]);
+                                sb.Append(deleteCode
                                     ? fmt.OneLinerColdStartOutputToken
                                     : fmt.OneLinerStartOutputToken);
                                 sb.Append(deleteOutput
                                     ? ""
                                     : (generate ? outSegs[2] : inSegs[2]));
-                                sb.Append(deleteSpitCode ? fmt.OneLinerColdEndOutputToken : fmt.OneLinerEndOutputToken);
+                                sb.Append(deleteCode ? fmt.OneLinerColdEndOutputToken : fmt.OneLinerEndOutputToken);
                                 sb.Append(outSegs[3]);
                                 writtenUnindentLines = sb.ToString().Array1();
                             } break;
                             case LineGroupType.TwoLiner:
                             {
                                 var code = lineGroup.DeIndentedOutLines[0];
-                                writtenUnindentLines = !deleteSpitCode
-                                    ? $"{fmt.StartSpitToken}{code}{fmt.StartOutputToken}".Array1()
+                                writtenUnindentLines = !deleteCode
+                                    ? $"{fmt.StartCodeToken}{code}{fmt.StartOutputToken}".Array1()
                                     : fmt.ColdStartOutputToken.Array1();
                             } break;
-                            case LineGroupType.StartSpitCode:
+                            case LineGroupType.StartCode:
                             {
-                                if (deleteSpitCode) { writtenUnindentLines = null; }
+                                if (deleteCode) { writtenUnindentLines = null; }
                             } break;
-                            case LineGroupType.SpitCode:
+                            case LineGroupType.WhomstCode:
                             {
-                                if (deleteSpitCode) { writtenUnindentLines = null; }
+                                if (deleteCode) { writtenUnindentLines = null; }
                             } break;
                             case LineGroupType.StartOutput:
                             {
-                                if (deleteSpitCode)
+                                if (deleteCode)
                                 {
                                     writtenUnindentLines = fmt.ColdStartOutputToken.Array1();
                                 }
                             } break;
-                            case LineGroupType.SpitOutput:
+                            case LineGroupType.GenOutput:
                             {
                                 if (!generate) { writtenUnindentLines = lineGroup.DeIndentedInLines; }
                                 if (deleteOutput) { writtenUnindentLines = null; }
@@ -522,8 +522,8 @@ namespace SpitCS
                                     writtenUnindentLines = $"{fmt.EndOutputToken}".Array1();
                                 }
 
-                                // or if spit code is deleted, replace with cold output token
-                                if (deleteSpitCode)
+                                // or if whomst code is deleted, replace with cold output token
+                                if (deleteCode)
                                 {
                                     writtenUnindentLines = writtenUnindentLines.Select(
                                         l => l.Replace(fmt.StartOutputToken, fmt.ColdStartOutputToken)).ToList();
@@ -568,16 +568,16 @@ namespace SpitCS
     public enum LineGroupType
     {
         Content,
-        StartSpitCode,
-        SpitCode,
+        StartCode,
+        WhomstCode,
         StartOutput,
-        SpitOutput,
+        GenOutput,
         EndOutput,
         TwoLiner,
         OneLiner,
     }
 
-    public interface ISpitGlobals
+    public interface IWhomstGlobals
     {
         string PrevContent { get; }
         string PrevOutput { get; }
@@ -586,31 +586,31 @@ namespace SpitCS
         IList<string> PrevOutputLines { get; }
         IList<string> PrevCodeLines { get; }
         IDictionary<string, object> Defines { get; }
-        TextWriter SpitOut { get; }
+        TextWriter WhomstOut { get; }
         string AtString(string s);
-        OneTimeScriptState SpitEval(
+        OneTimeScriptState WhostEval(
             string code,
             [CallerFilePath] string sourceFile = "UNKNOWN",
             [CallerLineNumber] int lineNumber = -1);
         FileCfg FileConfig { get; }
         StackCfg StackConfig { get; }
-        OneTimeScriptState SpitLoad(
+        OneTimeScriptState WhomstLoad(
             string inputFile, string outputFile = null, FileOp operations = FileOp.None,
             [CallerFilePath] string sourceFile = "UNKNOWN",
             [CallerLineNumber] int lineNumber = -1);
-        OneTimeScriptState SpitLoad(
+        OneTimeScriptState WhomstLoad(
             FileCfg fileCfg, StackCfg stackCfg = null,
             [CallerFilePath] string sourceFile = "UNKNOWN",
             [CallerLineNumber] int lineNumber = -1);
     }
 
-    public class SpitJob
+    public class WhomstJob
     {
         // Long term state
         public readonly IList<LineGroup> LineGroups = new List<LineGroup>();
 
         // Changes between blocks
-        public StringWriter SpitOut;
+        public StringWriter WhomstOut;
         public IList<string> PrevCodeLines = new List<string>();
         public IList<string> PrevContentLines = new List<string>();
         public IList<string> PrevOutputLines = new List<string>();

@@ -1,2 +1,2 @@
-# SpitCS
+# Whomst
 Not ready yet!

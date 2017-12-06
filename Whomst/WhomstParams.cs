@@ -4,14 +4,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Text;
-using FmtDict = System.Collections.Generic.Dictionary<string, SpitCS.FormatCfg>;
+using FmtDict = System.Collections.Generic.Dictionary<string, Whomst.FormatCfg>;
 using DefineDict = System.Collections.Generic.Dictionary<string, object>;
 using Newtonsoft.Json.Linq;
 
 // TODO ApplyDefaults/FillUnset semantics probably are stupid and should be replaced with an overwriting merge always
-namespace SpitCS
+namespace Whomst
 {
-    public abstract class SpitCfg<T> where T:SpitCfg<T>
+    public abstract class WhomstCfg<T> where T:WhomstCfg<T>
     {
         public T MergeOverWith(T overwriter)
         {
@@ -39,7 +39,7 @@ namespace SpitCS
     }
 
     // TODO maybe combine with FileCfg?? (maybe)
-    [DataContract] public class StackCfg : SpitCfg<StackCfg>
+    [DataContract] public class StackCfg : WhomstCfg<StackCfg>
     {
         [DataMember] public HashSet<string> Includes { get; set; } = new HashSet<string>();
         [DataMember] public HashSet<string> Assemblies { get; set; } = new HashSet<string>();
@@ -69,7 +69,7 @@ namespace SpitCS
                 "System.Text.RegularExpressions",
                 "System.IO",
                 "System.Runtime.CompilerServices",
-                nameof(SpitCS)
+                nameof(Whomst)
             },
             DefaultFormatCfg = FormatCfg.Default(),
             FormatDict = new FmtDict
@@ -78,7 +78,7 @@ namespace SpitCS
             },
             InitialDefines = new DefineDict
             {
-                ["Credit"] = "/* Made with help from SpitCS: http://github.com/OswaldHurlem/SpitCS */",
+                ["Credit"] = $"/* Made with help from {nameof(Whomst)}: http://github.com/OswaldHurlem/Whomst */",
             }
         };
 
@@ -122,12 +122,12 @@ namespace SpitCS
         }
     }
 
-    [DataContract] public class FormatCfg : SpitCfg<FormatCfg>
+    [DataContract] public class FormatCfg : WhomstCfg<FormatCfg>
     {
-        [DataMember] public string StartSpitToken { get; set; } = null;
+        [DataMember] public string StartCodeToken { get; set; } = null;
         [DataMember] public string StartOutputToken { get; set; } = null;
         [DataMember] public string EndOutputToken { get; set; } = null;
-        [DataMember] public string OneLinerStartSpitToken { get; set; } = null;
+        [DataMember] public string OneLinerStartCodeToken { get; set; } = null;
         [DataMember] public string OneLinerStartOutputToken { get; set; } = null;
         [DataMember] public string OneLinerEndOutputToken { get; set; } = null;
         [DataMember] public string ColdStartOutputToken { get; set; } = null;
@@ -151,10 +151,10 @@ namespace SpitCS
 
         public static FormatCfg Default() => new FormatCfg
         {
-            StartSpitToken = "/*{{",
+            StartCodeToken = "/*{{",
             StartOutputToken = "}}*/",
             EndOutputToken = "//{}",
-            OneLinerStartSpitToken = "/*{",
+            OneLinerStartCodeToken = "/*{",
             OneLinerStartOutputToken = "}*/",
             OneLinerEndOutputToken = "/**/",
             ColdStartOutputToken = "/*[*/",
@@ -171,7 +171,7 @@ namespace SpitCS
 
         public static FormatCfg Python() => new FormatCfg
         {
-            StartSpitToken = "<|<",
+            StartCodeToken = "<|<",
             StartOutputToken = ">|>",
             EndOutputToken = "<|>",
             ColdStartOutputToken = "[|[",
@@ -188,7 +188,7 @@ namespace SpitCS
 
 
 
-    [DataContract] public class FileCfg : SpitCfg<FileCfg>
+    [DataContract] public class FileCfg : WhomstCfg<FileCfg>
     {
         [DataMember] public FormatCfg FormatCfg { get; set; } = new FormatCfg();
 
@@ -212,13 +212,13 @@ namespace SpitCS
 
         [DataMember] public bool? Generate { get; set; } = null;
         [DataMember] public bool? DeleteOutput { get; set; } = null;
-        [DataMember] public bool? DeleteSpitCode { get; set; } = null;
+        [DataMember] public bool? DeleteCode { get; set; } = null;
         [DataMember] public bool? SkipCompute { get; set; } = null;
 
-        public bool ShallGenerate       { get => Generate       ?? false; set => Generate       = value; }
-        public bool ShallDeleteOutput   { get => DeleteOutput   ?? false; set => DeleteOutput   = value; }
-        public bool ShallDeleteSpitCode { get => DeleteSpitCode ?? false; set => DeleteSpitCode = value; }
-        public bool ShallSkipCompute    { get => SkipCompute    ?? false; set => SkipCompute    = value; }
+        public bool ShallGenerate     { get => Generate     ?? false; set => Generate       = value; }
+        public bool ShallDeleteOutput { get => DeleteOutput ?? false; set => DeleteOutput   = value; }
+        public bool ShallDeleteCode   { get => DeleteCode   ?? false; set => DeleteCode     = value; }
+        public bool ShallSkipCompute  { get => SkipCompute  ?? false; set => SkipCompute    = value; }
 
         [DataMember] public DefineDict Defines { get; set; } = new DefineDict();
 
@@ -237,7 +237,7 @@ namespace SpitCS
             if (Generate == null
                 && SkipCompute == null
                 && !ShallDeleteOutput
-                && !ShallDeleteSpitCode)
+                && !ShallDeleteCode)
             {
                 Generate = true;
             }
@@ -266,12 +266,12 @@ namespace SpitCS
         {   
             if (flags.HasFlag(FileOp.Generate)       && !flags.HasFlag(FileOp.DontGenerate))       { Generate       = true; }
             if (flags.HasFlag(FileOp.DeleteOutput)   && !flags.HasFlag(FileOp.DontDeleteOutput))   { DeleteOutput   = true; }
-            if (flags.HasFlag(FileOp.DeleteSpitCode) && !flags.HasFlag(FileOp.DontDeleteSpitCode)) { DeleteSpitCode = true; }
+            if (flags.HasFlag(FileOp.DeleteSpitCode) && !flags.HasFlag(FileOp.DontDeleteSpitCode)) { DeleteCode = true; }
             if (flags.HasFlag(FileOp.SkipCompute)    && !flags.HasFlag(FileOp.DontSkipCompute))    { SkipCompute    = true; }
 
             if (!flags.HasFlag(FileOp.Generate)       && flags.HasFlag(FileOp.DontGenerate))       { Generate       = false; }
             if (!flags.HasFlag(FileOp.DeleteOutput)   && flags.HasFlag(FileOp.DontDeleteOutput))   { DeleteOutput   = false; }
-            if (!flags.HasFlag(FileOp.DeleteSpitCode) && flags.HasFlag(FileOp.DontDeleteSpitCode)) { DeleteSpitCode = false; }
+            if (!flags.HasFlag(FileOp.DeleteSpitCode) && flags.HasFlag(FileOp.DontDeleteSpitCode)) { DeleteCode = false; }
             if (!flags.HasFlag(FileOp.SkipCompute)    && flags.HasFlag(FileOp.DontSkipCompute))    { SkipCompute    = false; }
 
             return this;
@@ -303,7 +303,7 @@ namespace SpitCS
     }
 }
 
-namespace SpitCS.User
+namespace Whomst.User
 {
     public static class Test
     {
