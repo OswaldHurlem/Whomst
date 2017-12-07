@@ -9,11 +9,13 @@ using System.Security.Cryptography;
 
 /*
  * TODO (list)
+ * Present use cases
  * Cleanup
  * Multiple one-liners per line
  * Force in one-liners
  * Multiple files in cmd line
- * NewLine!!
+ * Test newline handling
+ * Tweak indent rules??
  * Yield not at beginning of line??
  * No hash when InFile != OutFile
  * Dubious restriction on stuff same line as start/end tokens

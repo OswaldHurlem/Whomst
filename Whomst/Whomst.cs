@@ -28,6 +28,7 @@ namespace Whomst
         public WhomstJob CurrentJob => jobStack.Peek();
 
         #region IWhomstGlobals implementation
+        IWhomstGlobals IWhomstGlobals.Globals => this;
         IList<string> IWhomstGlobals.PrevCodeLines => CurrentJob.PrevCodeLines;
         IList<string> IWhomstGlobals.PrevContentLines => CurrentJob.PrevContentLines;
         IList<string> IWhomstGlobals.PrevOutputLines => CurrentJob.PrevOutputLines;
@@ -37,7 +38,7 @@ namespace Whomst
         TextWriter IWhomstGlobals.WhomstOut => CurrentJob.WhomstOut;
         string IWhomstGlobals.AtString(string s) => Util.AtString(s, CurrentJob.FileCfg.FormatCfg.NewL);
         IDictionary<string, object> IWhomstGlobals.Defines => CurrentJob.FileCfg.Defines;
-        OneTimeScriptState IWhomstGlobals.WhostEval(string code, string src, int ln) =>
+        OneTimeScriptState IWhomstGlobals.WhomstEval(string code, string src, int ln) =>
             new OneTimeScriptState(Eval(code, src, ln), src, ln);
         FileCfg IWhomstGlobals.FileConfig => CurrentJob.SharedFileCfg.Clone();
         StackCfg IWhomstGlobals.StackConfig => CurrentJob.SharedStackCfg.Clone();
@@ -148,11 +149,11 @@ namespace Whomst
                     {
                         case LineGroupType.Content:
                             var startTokenInd = line.IndexOf(fmt.StartCodeToken);
-                            if (0 < startTokenInd)
+                            if (0 <= startTokenInd)
                             {
                                 job.LineGroups.Last().ExclEnd = index;
                                 var endTokenInd = line.IndexOf(fmt.StartOutputToken);
-                                if (0 < endTokenInd)
+                                if (0 <= endTokenInd)
                                 {
                                     Assert(startTokenInd < endTokenInd, 
                                         $"{fmt.StartOutputToken} came before {fmt.StartCodeToken}");
@@ -168,7 +169,7 @@ namespace Whomst
 
                             var startOneLinerInd = line.IndexOf(fmt.OneLinerStartCodeToken);
 
-                            if (0 < startOneLinerInd && (startTokenInd < 0))
+                            if (0 <= startOneLinerInd && (startTokenInd < 0))
                             {
                                 var midOneLinerInd = line.IndexOf(fmt.OneLinerStartOutputToken);
                                 var endOneLinerInd = line.IndexOf(fmt.OneLinerEndOutputToken);
@@ -288,9 +289,10 @@ namespace Whomst
 
                     lineGroup.Indent = lineGroup.Indent ?? indent;
                     lineGroup.DeIndentedInLines = lineGroup.DeIndentedInLines
-                        ?? lineGroup.InLines.Select(l =>
+                        ?? lineGroup.InLines.Select((l, ind) =>
                         {
-                            Util.Assert(l.StartsWith(lineGroup.Indent), "Line not indented");
+                            Util.Assert(l.StartsWith(lineGroup.Indent), "Line not indented",
+                                job.FileCfg.InputFileName, lineGroup.StartingLineNumber + ind);
                             return l.Substring(lineGroup.Indent.Length);
                         }).ToList();
 
@@ -341,7 +343,8 @@ namespace Whomst
                             var endIndRight = endInd + fmt.OneLinerEndOutputToken.Length;
                             var code = firstLine.Substring(startIndRight, midInd - startIndRight);
                             var oldOutput = firstLine.Substring(midIndRight, endInd - midIndRight);
-                            var output = RunAndRtrn(code, job.FileCfg.InputFileName, lineGroup.StartingLineNumber);
+                            var output = RunAndRtrn(code, job.FileCfg.InputFileName, lineGroup.StartingLineNumber)
+                                    ?.Replace(fmt.NewL, ", ");
                             // TODO this is shameful
                             lineGroup.DeIndentedOutLines = new[]
                             {
@@ -355,7 +358,7 @@ namespace Whomst
                             {
                                 firstLine.Substring(0, startInd),
                                 code,
-                                oldOutput,
+                                oldOutput ?? "",
                                 firstLine.Substring(endIndRight, firstLine.Length - endIndRight),
                             };
                         } break;
@@ -389,7 +392,7 @@ namespace Whomst
                             {
                                 var lineCpy = job.PrevCodeLines[ind];
 
-                                if (lineCpy.StartsWith(fmt.ForceDirective))
+                                if (lineCpy.Contains(fmt.ForceDirective))
                                 {
                                     lineCpy = lineCpy.Replace(fmt.ForceDirective, "");
                                 }
@@ -579,6 +582,7 @@ namespace Whomst
 
     public interface IWhomstGlobals
     {
+        IWhomstGlobals Globals { get; }
         string PrevContent { get; }
         string PrevOutput { get; }
         string PrevCode { get; }
@@ -588,7 +592,7 @@ namespace Whomst
         IDictionary<string, object> Defines { get; }
         TextWriter WhomstOut { get; }
         string AtString(string s);
-        OneTimeScriptState WhostEval(
+        OneTimeScriptState WhomstEval(
             string code,
             [CallerFilePath] string sourceFile = "UNKNOWN",
             [CallerLineNumber] int lineNumber = -1);
