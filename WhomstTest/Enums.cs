@@ -23,7 +23,7 @@ namespace WhomstTest
             WhomstOut.WriteLine("}");
         }
     }}*/
-    //{} HASH: D41D8CD98F00B204E9800998ECF8427E
+    //{}
 
     public class ReesesEater
     {
@@ -40,16 +40,15 @@ namespace WhomstTest
                 case ReesesTechnique.ChoppedIntoSlices:
                     // ...
                     break;
+                case ReesesTechnique.InIceCream:
+                    //...
+                    break;
+                case ReesesTechnique.UpTheExhaust:
+                    break;
             }
         }
     }
 
     /*{{ OutputOptionEnum("ReesesTechnique", PrevContent) }}*/
-    public enum ReesesTechnique
-    {
-        TwoAtATime,
-        InASpiral,
-        ChoppedIntoSlices,
-    }
-    //{} HASH: A88CCFA354BDDFAE89C41A664BE0AE08
+    //{}
 }

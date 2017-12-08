@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace WhomstTest
 {
     /*{{ }}*/
-    //{} HASH: D41D8CD98F00B204E9800998ECF8427E
+    //{}
     public interface IGun
     {
         int Shoot();
@@ -26,6 +26,11 @@ namespace WhomstTest
     public interface IHead
     {
         int EyeLasers();
+    }
+
+    public interface IWings
+    {
+        bool CanFly();
     }
     /*{{
         `yield WhomstEval(PrevContent)
@@ -53,22 +58,7 @@ namespace WhomstTest
             WhomstOut.WriteLine("}");
         }
         
-        OutputComposition("Voltron", typeof(IGun), typeof(ILegs), typeof(ISword), typeof(IHead));
+        OutputComposition("Voltron", typeof(IGun), typeof(ILegs), typeof(ISword), typeof(IHead), typeof(IWings));
     }}*/
-    public partial class Voltron :
-        IGun,
-        ILegs,
-        ISword,
-        IHead
-    {
-        public IGun IGun;
-        public System.Int32 Shoot() => IGun.Shoot();
-        public ILegs ILegs;
-        public System.Int32 Legs() => ILegs.Legs();
-        public ISword ISword;
-        public System.Int32 Slash() => ISword.Slash();
-        public IHead IHead;
-        public System.Int32 EyeLasers() => IHead.EyeLasers();
-    }
-    //{} HASH: 37D75DB55FF237FBD86255CE5E4A32C6
+    //{}
 }

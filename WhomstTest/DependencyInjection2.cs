@@ -44,7 +44,7 @@ namespace WhomstTest
             set => DbWriter.WriteToDb<DateTime?>(value);
         }
 
-        public IDatabaseWriter DbWriter { get; set; } = /*{implementations["IDatabaseWriter"]}*/new CoconuttoDbWriter()/**/;
+        public IDatabaseWriter DbWriter { get; set; } = /*{implementations["IDatabaseWriter"]}*//**/;
     }
 
 

@@ -69,15 +69,15 @@ namespace WhomstTest
         public abstract void ReadPtr(IntPtr ptr, ref T val);
         public abstract void WritePtr(IntPtr ptr, ref T val);
 
-        /*public void ReadPtr_NOPE(IntPtr ptr, ref T val)
-        {
-            val = *(T*)ptr;
-        }
-
-        public void WritePtr_NOPE(IntPtr ptr, ref T val)
-        {
-            *(T*)ptr = val;
-        }*/
+        //public void ReadPtr_NOPE(IntPtr ptr, ref T val)
+        //{
+        //    val = *(T*)ptr;
+        //}
+        //
+        //public void WritePtr_NOPE(IntPtr ptr, ref T val)
+        //{
+        //    *(T*)ptr = val;
+        //}
 
         public IntPtr PtrAt(int i)
         {
@@ -134,52 +134,7 @@ namespace WhomstTest
             WhomstOut.WriteLine(template.Replace("TEMPLATE", t));
         }
     }}*/
-    
-    public class RawArray_RTSEnemy : RawArray<RTSEnemy>
-    {
-        public RawArray_RTSEnemy(int length) : base(length) { }
-    
-        public override unsafe void ReadPtr(IntPtr ptr, ref RTSEnemy val)
-        {
-            val = *(RTSEnemy*)ptr;
-        }
-    
-        public override unsafe void WritePtr(IntPtr ptr, ref RTSEnemy val)
-        {
-            *(RTSEnemy*)ptr = val;
-        }
-    }
-    
-    public class RawArray_int : RawArray<int>
-    {
-        public RawArray_int(int length) : base(length) { }
-    
-        public override unsafe void ReadPtr(IntPtr ptr, ref int val)
-        {
-            val = *(int*)ptr;
-        }
-    
-        public override unsafe void WritePtr(IntPtr ptr, ref int val)
-        {
-            *(int*)ptr = val;
-        }
-    }
-    
-    public class RawArray_float : RawArray<float>
-    {
-        public RawArray_float(int length) : base(length) { }
-    
-        public override unsafe void ReadPtr(IntPtr ptr, ref float val)
-        {
-            val = *(float*)ptr;
-        }
-    
-        public override unsafe void WritePtr(IntPtr ptr, ref float val)
-        {
-            *(float*)ptr = val;
-        }
-    }
-    //{} HASH: 9EF434582AB8A6C0783FB43B8A4CF12C
+    //{}
     //!! Other examples: multidimensional arrays, arithmetic, vectors
 
     public class RawArrayUser

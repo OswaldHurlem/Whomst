@@ -18,8 +18,8 @@ namespace WhomstTest
 
         //!! This is to pretend like we have a bunch of overloads for
         //!! basic types a la LBP Method. ex:
-        //!! Serialize(string, ref int)
-        //!! Serialize(string, ref string)
+        //!! FastSerialize(string, ref int)
+        //!! FastSerialize(string, ref string)
         public static void FastSerialize<T>(string name, ref T value)
         {
             throw new NotImplementedException();
@@ -42,15 +42,7 @@ namespace WhomstTest
         
             OutputSerializer<RTSEnemy>();
         }}*/
-        public static void FastSerialize(string name, ref RTSEnemy rtsenemy)
-        {
-            FastSerializeTag(name);
-            FastSerialize("Evilness", ref rtsenemy.Evilness);
-            FastSerialize("Health", ref rtsenemy.Health);
-            FastSerialize("PosX", ref rtsenemy.PosX);
-            FastSerialize("PosY", ref rtsenemy.PosY);
-        }
-        //{} HASH: 26EF9AB2CBBD6FB1DD8A9EC82F89238C
+        //{}
 
         //!! Other uses: Cloning, ToString, GetHashCode, == operator, privacy-controlling interfaces, etc.
     }

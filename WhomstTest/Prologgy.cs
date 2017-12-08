@@ -17,8 +17,6 @@ namespace WhomstTest
 
     class Prologgy
     {
-        /*{{ }}*/
-        //{}
         #if DECLARATIVE_CODEGEN
             var [16] var FieldType Fields
             var int Sheep
@@ -34,11 +32,10 @@ namespace WhomstTest
             
             Delta<Bread> := UsingOven ? 1 : 0
             Delta<Grains> := UsingOven ? -1 : 0
-            Delta<Goblins> := Pumpkins/4
+            Delta<Goblins> := count(fields, @ == PumpkinPatch)/4
 
             int Score := (Starving ? -3 : 0) + (Goblins > 2 ? 4 : 0) + HouseSize
         #endif
-        /*{{ DoMagic(PrevContent) }}*/
         struct FrameState
         {
             public FieldType[] Fields;
@@ -66,6 +63,5 @@ namespace WhomstTest
             Curr.Grains = Prev.Grains + (Prev.UsingOven ? -1 : 0);
             Curr.Score = (Prev.Starving ? -3 : 0) + (Prev.Goblins > 2 ? 4 : 0) + Prev.HouseSize;
         }
-        //{}
     }
 }

@@ -48,10 +48,11 @@ inline double root3(double x)
 // In case 3 real roots: => x[0], x[1], x[2], return 3
 //         2 real roots: x[0], x[1],          return 2
 //         1 real root : x[0], x[1] � i*x[2], return 1
-int SolveP3(double *x, double a, double b, double c)
+int SolveP3_b_is_3(double *x, double a, double c)
 {
+	const double b = 3.0;
 	/*{{ }}*/
-	//{} HASH: D41D8CD98F00B204E9800998ECF8427E
+	//{}
 	// solve cubic equation x^3 + a*x^2 + b*x + c = 0
 	double a2 = a*a;
 	double q = (a2 - 3 * b) / 9;
@@ -86,7 +87,7 @@ int SolveP3(double *x, double a, double b, double c)
 		return(1);
 	}
 	/*{{ var cubicCode = PrevContent; }}*/
-	//{} HASH: D41D8CD98F00B204E9800998ECF8427E
+	//{}
 }
 
 int SolveP3_A1(double *x, double b, double c)
@@ -95,40 +96,7 @@ int SolveP3_A1(double *x, double b, double c)
 	/*{{
 		cubicCode
 	}}*/
-		// solve cubic equation x^3 + a*x^2 + b*x + c = 0
-		double a2 = a*a;
-		double q = (a2 - 3 * b) / 9;
-		double r = (a*(2 * a2 - 9 * b) + 27 * c) / 54;
-		// equation x^3 + q*x + r = 0
-		double r2 = r*r;
-		double q3 = q*q*q;
-		double A, B;
-		if (r2 <= (q3 + eps))
-		{
-			double t = r / sqrt(q3);
-			if (t<-1) t = -1;
-			if (t> 1) t = 1;
-			t = acos(t);
-			a /= 3; q = -2 * sqrt(q);
-			x[0] = q*cos(t / 3) - a;
-			x[1] = q*cos((t + TwoPi) / 3) - a;
-			x[2] = q*cos((t - TwoPi) / 3) - a;
-			return(3);
-		}
-		else
-		{
-			A = -root3(fabs(r) + sqrt(r2 - q3));
-			if (r<0) A = -A;
-			B = A == 0 ? 0 : B = q / A;
-	
-			a /= 3;
-			x[0] = (A + B) - a;
-			x[1] = -0.5*(A + B) - a;
-			x[2] = 0.5*sqrt(3.)*(A - B);
-			if (fabs(x[2])<eps) { x[2] = x[1]; return(2); }
-			return(1);
-		}
-	//{} HASH: 4275D475C3E4B9D599A33BF6BFBE7D71
+	//{}
 }
 
 int SolveP3_C0(double *x, double a, double b)
@@ -137,40 +105,7 @@ int SolveP3_C0(double *x, double a, double b)
 	/*{{
 		cubicCode
 	}}*/
-		// solve cubic equation x^3 + a*x^2 + b*x + c = 0
-		double a2 = a*a;
-		double q = (a2 - 3 * b) / 9;
-		double r = (a*(2 * a2 - 9 * b) + 27 * c) / 54;
-		// equation x^3 + q*x + r = 0
-		double r2 = r*r;
-		double q3 = q*q*q;
-		double A, B;
-		if (r2 <= (q3 + eps))
-		{
-			double t = r / sqrt(q3);
-			if (t<-1) t = -1;
-			if (t> 1) t = 1;
-			t = acos(t);
-			a /= 3; q = -2 * sqrt(q);
-			x[0] = q*cos(t / 3) - a;
-			x[1] = q*cos((t + TwoPi) / 3) - a;
-			x[2] = q*cos((t - TwoPi) / 3) - a;
-			return(3);
-		}
-		else
-		{
-			A = -root3(fabs(r) + sqrt(r2 - q3));
-			if (r<0) A = -A;
-			B = A == 0 ? 0 : B = q / A;
-	
-			a /= 3;
-			x[0] = (A + B) - a;
-			x[1] = -0.5*(A + B) - a;
-			x[2] = 0.5*sqrt(3.)*(A - B);
-			if (fabs(x[2])<eps) { x[2] = x[1]; return(2); }
-			return(1);
-		}
-	//{} HASH: 4275D475C3E4B9D599A33BF6BFBE7D71
+	//{}
 }
 
 //!! How you sometimes do it in C

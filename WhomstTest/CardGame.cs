@@ -13,7 +13,7 @@ namespace WhomstTest
                 .Where(fi => fi.FieldType == fieldType).Select(f => f.Name).ToList();
         }
     }}*/
-    //{} HASH: D41D8CD98F00B204E9800998ECF8427E
+    //{}
     public class Card
     {
         public string Name;
@@ -38,7 +38,7 @@ namespace WhomstTest
         `yield WhomstEval("public enum CardId {}")
         WhomstEval(PrevContent)
     }}*/
-    //{} HASH: D41D8CD98F00B204E9800998ECF8427E
+    //{}
 
     partial class Cards
     {
@@ -52,30 +52,15 @@ namespace WhomstTest
                     WhomstOut.WriteLine($"{fn}.Name = \"{fn}\";");
                 }
             }}*/
-            Tortoise.Name = "Tortoise";
-            Snake.Name = "Snake";
-            Lion.Name = "Lion";
-            Squirrel.Name = "Squirrel";
-            Rat.Name = "Rat";
-            //{} HASH: 453059FEC98452BB44B9B79C8BBC3BE9
+            //{}
 
             /*{{ string.Join("\r\n", fNames.Select(fn => $"{fn}.Id = CardId.{fn};")) }}*/
-            Tortoise.Id = CardId.Tortoise;
-            Snake.Id = CardId.Snake;
-            Lion.Id = CardId.Lion;
-            Squirrel.Id = CardId.Squirrel;
-            Rat.Id = CardId.Rat;
-            //{} HASH: 6F3B2E61D9C6C137DA1CEE07236241B0
+            //{}
 
             AllCards = new List<Card>
             {
                 /*{{ string.Join("\r\n", fNames.Select(fn => fn + ",")) }}*/
-                Tortoise,
-                Snake,
-                Lion,
-                Squirrel,
-                Rat,
-                //{} HASH: 6C4C2C598DE7D3225DD2D160E5AD7125
+                //{}
             };
         }
     }
@@ -83,11 +68,6 @@ namespace WhomstTest
     public enum CardId
     {
         /*{{ string.Join("\r\n", fNames.Select(fn => fn + ",")) }}*/
-        Tortoise,
-        Snake,
-        Lion,
-        Squirrel,
-        Rat,
-        //{} HASH: 6C4C2C598DE7D3225DD2D160E5AD7125
+        //{}
     }
 }

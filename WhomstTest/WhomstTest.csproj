@@ -72,8 +72,8 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="DependencyInjector.txt" />
     <Content Include="FakeCppFile.cpp" />
+    <Content Include="Optimization.cpp" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

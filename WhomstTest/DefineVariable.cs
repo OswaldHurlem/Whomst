@@ -14,8 +14,7 @@ namespace WhomstTest
                 var stringDefinedInOtherFile = "Console.WriteLine(\"From other file!\");";
                 stringDefinedInOtherFile
             }}*/
-            Console.WriteLine("From other file!");
-            //{} HASH: 24FA8DD77E8FD7C4DD086501E4079984
+            //{}
         }
     }
 }

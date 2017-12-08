@@ -1,2 +1,2 @@
 # Whomst
-Not ready yet!
+An inline C# script based inline code generator. Very pre-alpha.
